@@ -79,17 +79,14 @@ def _normalize_color(color):
         return None
     if isinstance(color, str):
         try:
-            # 处理 CSS 颜色名、十六进制、rgb(r,g,b)
             rgb = ImageColor.getrgb(color)
             return rgb + (255,)
         except ValueError:
-            # 尝试处理 rgba(r,g,b,a) 格式
             match = re.match(r'rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([0-9.]+))?\)', color)
             if match:
                 r, g, b = int(match.group(1)), int(match.group(2)), int(match.group(3))
                 a = int(float(match.group(4)) * 255) if match.group(4) else 255
                 return (r, g, b, a)
-    # 默认黑色
     return (0, 0, 0, 255)
 
 
@@ -122,15 +119,12 @@ def _render_text(text, font_size, font_path, color, stroke, shadow, gradient, st
     draw = ImageDraw.Draw(img)
     x, y = pad, pad
 
-    # 归一化颜色
     shadow_color = _normalize_color(shadow.get('color')) if shadow else None
     stroke_color = _normalize_color(stroke['color']) if stroke else None
     text_color = _normalize_color(color) if color is not None else None
 
-    # 1. 阴影
     if shadow_color:
         draw.text((x + sdx, y + sdy), text, font=font, fill=shadow_color)
-    # 2. 描边
     if stroke_color:
         sw_ = stroke['width']
         for dx in range(-sw_, sw_ + 1):
@@ -139,13 +133,10 @@ def _render_text(text, font_size, font_path, color, stroke, shadow, gradient, st
                     continue
                 if dx * dx + dy * dy <= sw_ * sw_:
                     draw.text((x + dx, y + dy), text, font=font, fill=stroke_color)
-    # 3. 主体文字
     if text_color:
         draw.text((x, y), text, font=font, fill=text_color)
     else:
-        # 若颜色为 None（例如留给渐变），先用白色占位
         draw.text((x, y), text, font=font, fill='white')
-    # 4. 渐变
     if gradient and 'colors' in gradient:
         _apply_gradient(img, gradient['colors'], gradient.get('direction', 'vertical'))
 
@@ -157,7 +148,6 @@ def _render_text(text, font_size, font_path, color, stroke, shadow, gradient, st
 
 
 def _load_image(path, target_height):
-    """统一加载图片（SVG/PNG/JPEG等）并缩放到目标高度"""
     ext = os.path.splitext(path)[1].lower()
     try:
         if ext == '.svg':
@@ -320,7 +310,6 @@ def _layout_and_render(desc, icons_dir, def_icon_sz, def_font_sz, text_style,
         inner_y = y_offset + row['pad_y']
         x = inner_x
 
-        # 绘制背景+边框（合并）
         if row['background_color'] or row['border']:
             rect = [start_x, y_offset, start_x + row['total_width'], y_offset + row['total_height']]
             radius = row['border'].get('radius', 0) if row['border'] else 0
@@ -332,7 +321,6 @@ def _layout_and_render(desc, icons_dir, def_icon_sz, def_font_sz, text_style,
             else:
                 draw.rectangle(rect, fill=fill_color, outline=outline_color, width=outline_width)
 
-        # 绘制元素
         for elem in row['elements']:
             y = inner_y + (row['content_height'] - elem['height']) // 2 + elem['dy']
             canvas.alpha_composite(elem['content'], (x + elem['dx'], y))
@@ -340,7 +328,6 @@ def _layout_and_render(desc, icons_dir, def_icon_sz, def_font_sz, text_style,
 
         y_offset += row['total_height'] + row['v_spacing']
 
-    # 绘制连接线
     for i, row in enumerate(rows_info):
         if row['connect_to_next'] and i + 1 < len(rows_info):
             start_x1, y_top1, w1, h1, _ = row_positions[i]
@@ -356,8 +343,8 @@ def _layout_and_render(desc, icons_dir, def_icon_sz, def_font_sz, text_style,
     return canvas
 
 
-def _extract_location_name(desc):
-    """从图片描述中提取 location 后面的距离文本（如 "5km"）"""
+def _extract_distance(desc):
+    """从图片描述中提取 map-pin.svg 后面的距离文本（如 "5km"）"""
     norm = _normalize_desc(desc)
     if not norm:
         return None
@@ -423,19 +410,26 @@ def generate_images(descriptions, icons_dir, output_dir,
             'stretch': default_text_stretch
         }
 
+    total = len(descriptions)
     generated_files = []
     for idx, desc in enumerate(descriptions):
         img = _layout_and_render(desc, icons_dir,
                                  default_icon_size, default_font_size,
                                  text_style, margin, h_spacing, v_spacing,
                                  font_path)
-        distance = _extract_location_name(desc)
-        if distance:
-            safe_name = re.sub(r'[\\/*?:"<>|]', '', distance)
-            safe_name = safe_name.replace(' ', '_')
-            out_filename = f"{safe_name}.png"
+        # 命名规则：第一张 -> 起点，最后一张 -> 终点，中间按距离命名
+        if idx == 0:
+            out_filename = "起点.png"
+        elif idx == total - 1:
+            out_filename = "终点.png"
         else:
-            out_filename = f"output_{idx + 1}.png"
+            distance = _extract_distance(desc)
+            if distance:
+                safe_name = re.sub(r'[\\/*?:"<>|]', '', distance)
+                safe_name = safe_name.replace(' ', '_')
+                out_filename = f"{safe_name}.png"
+            else:
+                out_filename = f"output_{idx + 1}.png"
         out_path = os.path.join(output_dir, out_filename)
         img.save(out_path, 'PNG')
         generated_files.append(out_path)
@@ -519,9 +513,7 @@ if __name__ == '__main__':
     ICONS_DIR = './assert'
     OUTPUT_DIR = './output_images'
 
-    # 从外部 JSON 文件加载图片配置
     pictures = load_config("config.json")
-
     generate_images(pictures, ICONS_DIR, OUTPUT_DIR,
                     default_icon_size=48,
                     default_font_size=20,
