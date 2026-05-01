@@ -1,0 +1,742 @@
+[
+  [
+    [
+      {
+        "icon_size": 38,
+        "font_size": 40,
+        "h_spacing": 10,
+        "v_spacing": 10,
+        "text_style": {
+          "color": "#FFEAA7",
+          "stroke": {
+            "width": 2,
+            "color": "#FF0000"
+          },
+          "shadow": {
+            "offset": [
+              1,
+              1
+            ],
+            "color": [
+              0,
+              0,
+              0,
+              12
+            ]
+          },
+          "stretch": 1.2
+        },
+        "connect_to_next": false,
+        "line_style": {
+          "color": "white",
+          "width": 2
+        }
+      },
+      "location-start.svg",
+      "啤酒城"
+    ]
+  ],
+
+  [
+    [
+      {
+        "icon_size": 38,
+        "font_size": 40,
+        "h_spacing": 10,
+        "v_spacing": 10,
+        "text_style": {
+          "color": "#FFEAA7",
+          "stroke": {
+            "width": 2,
+            "color": "#FF0000"
+          },
+          "shadow": {
+            "offset": [
+              1,
+              1
+            ],
+            "color": [
+              0,
+              0,
+              0,
+              12
+            ]
+          },
+          "stretch": 1.2
+        },
+        "connect_to_next": false,
+        "line_style": {
+          "color": "white",
+          "width": 2
+        }
+      },
+      "map-pin.svg",
+      "2.5km"
+    ],
+    [
+      {
+        "icon_size": 60,
+        "font_size": 24,
+        "background_color": "white",
+        "border": {
+          "color": "white",
+          "width": 3,
+          "radius": 20,
+          "padding": 8
+        }
+      },
+      "restroom.svg",
+      "medical.svg"
+    ]
+  ],
+
+  [
+    [
+      {
+        "icon_size": 38,
+        "font_size": 40,
+        "h_spacing": 10,
+        "v_spacing": 10,
+        "text_style": {
+          "color": "#FFEAA7",
+          "stroke": {
+            "width": 2,
+            "color": "#FF0000"
+          },
+          "shadow": {
+            "offset": [
+              1,
+              1
+            ],
+            "color": [
+              0,
+              0,
+              0,
+              12
+            ]
+          },
+          "stretch": 1.2
+        },
+        "connect_to_next": false,
+        "line_style": {
+          "color": "white",
+          "width": 2
+        }
+      },
+      "map-pin.svg",
+      "4km"
+    ],
+    [
+      {
+        "icon_size": 60,
+        "font_size": 24,
+        "background_color": "white",
+        "border": {
+          "color": "white",
+          "width": 3,
+          "radius": 20,
+          "padding": 8
+        }
+      },
+      "water.svg",
+      "drink.svg",
+      "restroom.svg",
+      "medical.svg"
+    ]
+  ],
+
+  [
+    [
+      {
+        "icon_size": 38,
+        "font_size": 40,
+        "h_spacing": 10,
+        "v_spacing": 10,
+        "text_style": {
+          "color": "#FFEAA7",
+          "stroke": {
+            "width": 2,
+            "color": "#FF0000"
+          },
+          "shadow": {
+            "offset": [
+              1,
+              1
+            ],
+            "color": [
+              0,
+              0,
+              0,
+              12
+            ]
+          },
+          "stretch": 1.2
+        },
+        "connect_to_next": false,
+        "line_style": {
+          "color": "white",
+          "width": 2
+        }
+      },
+      "map-pin.svg",
+      "5km",
+      "closed_time.png",
+      "45分钟"
+    ],
+    [
+      {
+        "icon_size": 60,
+        "font_size": 24,
+        "background_color": "white",
+        "border": {
+          "color": "white",
+          "width": 3,
+          "radius": 20,
+          "padding": 8
+        }
+      },
+      "stopwatch.svg"
+    ]
+  ],
+
+  [
+    [
+      {
+        "icon_size": 38,
+        "font_size": 40,
+        "h_spacing": 10,
+        "v_spacing": 10,
+        "text_style": {
+          "color": "#FFEAA7",
+          "stroke": {
+            "width": 2,
+            "color": "#FF0000"
+          },
+          "shadow": {
+            "offset": [
+              1,
+              1
+            ],
+            "color": [
+              0,
+              0,
+              0,
+              12
+            ]
+          },
+          "stretch": 1.2
+        },
+        "connect_to_next": false,
+        "line_style": {
+          "color": "white",
+          "width": 2
+        }
+      },
+      "map-pin.svg",
+      "6km"
+    ],
+    [
+      {
+        "icon_size": 60,
+        "font_size": 24,
+        "background_color": "white",
+        "border": {
+          "color": "white",
+          "width": 3,
+          "radius": 20,
+          "padding": 8
+        }
+      },
+      "restroom.svg"
+    ]
+  ],
+
+
+  [
+    [
+      {
+        "icon_size": 38,
+        "font_size": 40,
+        "h_spacing": 10,
+        "v_spacing": 10,
+        "text_style": {
+          "color": "#FFEAA7",
+          "stroke": {
+            "width": 2,
+            "color": "#FF0000"
+          },
+          "shadow": {
+            "offset": [
+              1,
+              1
+            ],
+            "color": [
+              0,
+              0,
+              0,
+              12
+            ]
+          },
+          "stretch": 1.2
+        },
+        "connect_to_next": false,
+        "line_style": {
+          "color": "white",
+          "width": 2
+        }
+      },
+      "map-pin.svg",
+      "7km"
+    ],
+    [
+      {
+        "icon_size": 60,
+        "font_size": 24,
+        "background_color": "white",
+        "border": {
+          "color": "white",
+          "width": 3,
+          "radius": 20,
+          "padding": 8
+        }
+      },
+      "restroom.svg"
+    ]
+  ],
+
+
+  [
+    [
+      {
+        "icon_size": 38,
+        "font_size": 40,
+        "h_spacing": 10,
+        "v_spacing": 10,
+        "text_style": {
+          "color": "#FFEAA7",
+          "stroke": {
+            "width": 2,
+            "color": "#FF0000"
+          },
+          "shadow": {
+            "offset": [
+              1,
+              1
+            ],
+            "color": [
+              0,
+              0,
+              0,
+              12
+            ]
+          },
+          "stretch": 1.2
+        },
+        "connect_to_next": false,
+        "line_style": {
+          "color": "white",
+          "width": 2
+        }
+      },
+      "map-pin.svg",
+      "7.5km"
+    ],
+    [
+      {
+        "icon_size": 60,
+        "font_size": 24,
+        "background_color": "white",
+        "border": {
+          "color": "white",
+          "width": 3,
+          "radius": 20,
+          "padding": 8
+        }
+      },
+      "water.svg","medical.svg"
+    ]
+  ],
+
+
+  [
+    [
+      {
+        "icon_size": 38,
+        "font_size": 40,
+        "h_spacing": 10,
+        "v_spacing": 10,
+        "text_style": {
+          "color": "#FFEAA7",
+          "stroke": {
+            "width": 2,
+            "color": "#FF0000"
+          },
+          "shadow": {
+            "offset": [
+              1,
+              1
+            ],
+            "color": [
+              0,
+              0,
+              0,
+              12
+            ]
+          },
+          "stretch": 1.2
+        },
+        "connect_to_next": false,
+        "line_style": {
+          "color": "white",
+          "width": 2
+        }
+      },
+      "map-pin.svg",
+      "10km",
+      "closed_time.png",
+      "1小时30分"
+    ],
+    [
+      {
+        "icon_size": 60,
+        "font_size": 24,
+        "background_color": "white",
+        "border": {
+          "color": "white",
+          "width": 3,
+          "radius": 20,
+          "padding": 8
+        }
+      },
+      "drink.svg",
+      "water.svg",
+      "medical.svg",
+      "restroom.svg",
+      "shower.svg"
+    ]
+  ]
+
+  ,
+
+
+  [
+    [
+      {
+        "icon_size": 38,
+        "font_size": 40,
+        "h_spacing": 10,
+        "v_spacing": 10,
+        "text_style": {
+          "color": "#FFEAA7",
+          "stroke": {
+            "width": 2,
+            "color": "#FF0000"
+          },
+          "shadow": {
+            "offset": [
+              1,
+              1
+            ],
+            "color": [
+              0,
+              0,
+              0,
+              12
+            ]
+          },
+          "stretch": 1.2
+        },
+        "connect_to_next": false,
+        "line_style": {
+          "color": "white",
+          "width": 2
+        }
+      },
+      "map-pin.svg",
+      "12.5km"
+    ],
+    [
+      {
+        "icon_size": 60,
+        "font_size": 24,
+        "background_color": "white",
+        "border": {
+          "color": "white",
+          "width": 3,
+          "radius": 20,
+          "padding": 8
+        }
+      },
+      "water.svg",
+      "banana.png",
+      "medical.svg",
+      "sponge.png"
+    ]
+  ],
+
+
+  [
+    [
+      {
+        "icon_size": 38,
+        "font_size": 40,
+        "h_spacing": 10,
+        "v_spacing": 10,
+        "text_style": {
+          "color": "#FFEAA7",
+          "stroke": {
+            "width": 2,
+            "color": "#FF0000"
+          },
+          "shadow": {
+            "offset": [
+              1,
+              1
+            ],
+            "color": [
+              0,
+              0,
+              0,
+              12
+            ]
+          },
+          "stretch": 1.2
+        },
+        "connect_to_next": false,
+        "line_style": {
+          "color": "white",
+          "width": 2
+        }
+      },
+      "map-pin.svg",
+      "13km"
+    ],
+    [
+      {
+        "icon_size": 60,
+        "font_size": 24,
+        "background_color": "white",
+        "border": {
+          "color": "white",
+          "width": 3,
+          "radius": 20,
+          "padding": 8
+        }
+      },
+      "stopwatch.svg",
+      "restroom.svg"
+    ]
+  ],
+
+
+  [
+    [
+      {
+        "icon_size": 38,
+        "font_size": 40,
+        "h_spacing": 10,
+        "v_spacing": 10,
+        "text_style": {
+          "color": "#FFEAA7",
+          "stroke": {
+            "width": 2,
+            "color": "#FF0000"
+          },
+          "shadow": {
+            "offset": [
+              1,
+              1
+            ],
+            "color": [
+              0,
+              0,
+              0,
+              12
+            ]
+          },
+          "stretch": 1.2
+        },
+        "connect_to_next": false,
+        "line_style": {
+          "color": "white",
+          "width": 2
+        }
+      },
+      "map-pin.svg",
+      "15km",
+      "closed_time.png",
+      "2小时10分"
+    ],
+    [
+      {
+        "icon_size": 60,
+        "font_size": 24,
+        "background_color": "white",
+        "border": {
+          "color": "white",
+          "width": 3,
+          "radius": 20,
+          "padding": 8
+        }
+      },
+      "drink.svg",
+      "water.svg",
+      "medical.svg",
+      "restroom.svg",
+      "shower.svg",
+      "stopwatch.svg"
+    ]
+  ],
+
+
+  [
+    [
+      {
+        "icon_size": 38,
+        "font_size": 40,
+        "h_spacing": 10,
+        "v_spacing": 10,
+        "text_style": {
+          "color": "#FFEAA7",
+          "stroke": {
+            "width": 2,
+            "color": "#FF0000"
+          },
+          "shadow": {
+            "offset": [
+              1,
+              1
+            ],
+            "color": [
+              0,
+              0,
+              0,
+              12
+            ]
+          },
+          "stretch": 1.2
+        },
+        "connect_to_next": false,
+        "line_style": {
+          "color": "white",
+          "width": 2
+        }
+      },
+      "map-pin.svg",
+      "17.5km"
+    ],
+    [
+      {
+        "icon_size": 60,
+        "font_size": 24,
+        "background_color": "white",
+        "border": {
+          "color": "white",
+          "width": 3,
+          "radius": 20,
+          "padding": 8
+        }
+      },
+      "water.svg",
+      "banana.png",
+      "medical.svg",
+      "sponge.png"
+    ]
+  ],
+
+
+  [
+    [
+      {
+        "icon_size": 38,
+        "font_size": 40,
+        "h_spacing": 10,
+        "v_spacing": 10,
+        "text_style": {
+          "color": "#FFEAA7",
+          "stroke": {
+            "width": 2,
+            "color": "#FF0000"
+          },
+          "shadow": {
+            "offset": [
+              1,
+              1
+            ],
+            "color": [
+              0,
+              0,
+              0,
+              12
+            ]
+          },
+          "stretch": 1.2
+        },
+        "connect_to_next": false,
+        "line_style": {
+          "color": "white",
+          "width": 2
+        }
+      },
+      "map-pin.svg",
+      "20km",
+      "closed_time.png",
+      "2小时50分"
+    ],
+    [
+      {
+        "icon_size": 60,
+        "font_size": 24,
+        "background_color": "white",
+        "border": {
+          "color": "white",
+          "width": 3,
+          "radius": 20,
+          "padding": 8
+        }
+      },
+      "drink.svg",
+      "water.svg",
+      "medical.svg",
+      "restroom.svg",
+      "stopwatch.svg"
+    ]
+  ],
+  [
+    [
+      {
+        "icon_size": 38,
+        "font_size": 40,
+        "h_spacing": 10,
+        "v_spacing": 10,
+        "text_style": {
+          "color": "#FFEAA7",
+          "stroke": {
+            "width": 2,
+            "color": "#FF0000"
+          },
+          "shadow": {
+            "offset": [
+              1,
+              1
+            ],
+            "color": [
+              0,
+              0,
+              0,
+              12
+            ]
+          },
+          "stretch": 1.2
+        },
+        "connect_to_next": false,
+        "line_style": {
+          "color": "white",
+          "width": 2
+        }
+      },
+      "location-end.svg",
+      "啤酒城"
+    ]
+  ]
+]

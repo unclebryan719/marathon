@@ -4,7 +4,9 @@
 import os
 import io
 import platform
-from PIL import Image, ImageDraw, ImageFont
+import re
+import json
+from PIL import Image, ImageDraw, ImageFont, ImageColor
 import cairosvg
 
 # ========================== 全局默认配置 ==========================
@@ -63,6 +65,34 @@ def _load_font(font_size, font_path=None):
     raise RuntimeError("未找到任何可用的中文字体，请通过 font_path 指定正确的字体文件路径")
 
 
+def _normalize_color(color):
+    """将任何输入的颜色（字符串、元组、列表）转换为 PIL 支持的 RGBA 元组 (r,g,b,a)"""
+    if color is None:
+        return None
+    if isinstance(color, int):
+        return color
+    if isinstance(color, (tuple, list)):
+        if len(color) == 3:
+            return tuple(color) + (255,)
+        if len(color) == 4:
+            return tuple(color)
+        return None
+    if isinstance(color, str):
+        try:
+            # 处理 CSS 颜色名、十六进制、rgb(r,g,b)
+            rgb = ImageColor.getrgb(color)
+            return rgb + (255,)
+        except ValueError:
+            # 尝试处理 rgba(r,g,b,a) 格式
+            match = re.match(r'rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([0-9.]+))?\)', color)
+            if match:
+                r, g, b = int(match.group(1)), int(match.group(2)), int(match.group(3))
+                a = int(float(match.group(4)) * 255) if match.group(4) else 255
+                return (r, g, b, a)
+    # 默认黑色
+    return (0, 0, 0, 255)
+
+
 def _apply_gradient(img, colors, direction='vertical'):
     w, h = img.size
     grad = Image.new('RGBA', (w, h))
@@ -92,20 +122,30 @@ def _render_text(text, font_size, font_path, color, stroke, shadow, gradient, st
     draw = ImageDraw.Draw(img)
     x, y = pad, pad
 
-    if shadow:
-        draw.text((x + sdx, y + sdy), text, font=font, fill=shadow.get('color', 'gray'))
-    if stroke:
+    # 归一化颜色
+    shadow_color = _normalize_color(shadow.get('color')) if shadow else None
+    stroke_color = _normalize_color(stroke['color']) if stroke else None
+    text_color = _normalize_color(color) if color is not None else None
+
+    # 1. 阴影
+    if shadow_color:
+        draw.text((x + sdx, y + sdy), text, font=font, fill=shadow_color)
+    # 2. 描边
+    if stroke_color:
         sw_ = stroke['width']
         for dx in range(-sw_, sw_ + 1):
             for dy in range(-sw_, sw_ + 1):
                 if dx == 0 and dy == 0:
                     continue
                 if dx * dx + dy * dy <= sw_ * sw_:
-                    draw.text((x + dx, y + dy), text, font=font, fill=stroke['color'])
-    if color is not None:
-        draw.text((x, y), text, font=font, fill=color)
+                    draw.text((x + dx, y + dy), text, font=font, fill=stroke_color)
+    # 3. 主体文字
+    if text_color:
+        draw.text((x, y), text, font=font, fill=text_color)
     else:
+        # 若颜色为 None（例如留给渐变），先用白色占位
         draw.text((x, y), text, font=font, fill='white')
+    # 4. 渐变
     if gradient and 'colors' in gradient:
         _apply_gradient(img, gradient['colors'], gradient.get('direction', 'vertical'))
 
@@ -117,11 +157,7 @@ def _render_text(text, font_size, font_path, color, stroke, shadow, gradient, st
 
 
 def _load_image(path, target_height):
-    """
-    统一加载图片（支持 SVG 和 PNG/JPEG 等）。
-    - 如果后缀是 .svg，使用 cairosvg 渲染为 PNG 并转为 PIL Image。
-    - 否则直接用 PIL 打开，并调整高度到 target_height（保持宽高比），转为 RGBA。
-    """
+    """统一加载图片（SVG/PNG/JPEG等）并缩放到目标高度"""
     ext = os.path.splitext(path)[1].lower()
     try:
         if ext == '.svg':
@@ -129,7 +165,6 @@ def _load_image(path, target_height):
             img = Image.open(io.BytesIO(png_data)).convert('RGBA')
         else:
             img = Image.open(path).convert('RGBA')
-            # 按比例缩放高度
             ratio = target_height / img.height
             new_width = int(img.width * ratio)
             if new_width > 0 and target_height > 0:
@@ -137,13 +172,11 @@ def _load_image(path, target_height):
         return img
     except Exception as e:
         print(f"加载图片失败 {path}: {e}")
-        # 返回一个红色占位块
         return Image.new('RGBA', (target_height, target_height), (255, 0, 0, 128))
 
 
 def _parse_element(item, icons_dir, def_icon_sz, def_font_sz, text_style, font_path):
     if isinstance(item, str):
-        # 判断是否为图片文件（支持 .svg, .png, .jpg, .jpeg, .gif 等）
         image_extensions = ('.svg', '.png', '.jpg', '.jpeg', '.gif', '.bmp')
         if item.lower().endswith(image_extensions):
             img = _load_image(os.path.join(icons_dir, item), def_icon_sz)
@@ -279,7 +312,6 @@ def _layout_and_render(desc, icons_dir, def_icon_sz, def_font_sz, text_style,
     draw = ImageDraw.Draw(canvas)
 
     row_positions = []
-
     y_offset = margin
     for row in rows_info:
         start_x = margin + (canvas_width - 2 * margin - row['total_width']) // 2
@@ -288,17 +320,19 @@ def _layout_and_render(desc, icons_dir, def_icon_sz, def_font_sz, text_style,
         inner_y = y_offset + row['pad_y']
         x = inner_x
 
+        # 绘制背景+边框（合并）
         if row['background_color'] or row['border']:
             rect = [start_x, y_offset, start_x + row['total_width'], y_offset + row['total_height']]
             radius = row['border'].get('radius', 0) if row['border'] else 0
-            fill_color = row['background_color'] if row['background_color'] else None
-            outline_color = row['border']['color'] if row['border'] else None
+            fill_color = _normalize_color(row['background_color']) if row['background_color'] else None
+            outline_color = _normalize_color(row['border']['color']) if row['border'] else None
             outline_width = row['border']['width'] if row['border'] else 0
             if radius > 0:
                 draw.rounded_rectangle(rect, radius=radius, fill=fill_color, outline=outline_color, width=outline_width)
             else:
                 draw.rectangle(rect, fill=fill_color, outline=outline_color, width=outline_width)
 
+        # 绘制元素
         for elem in row['elements']:
             y = inner_y + (row['content_height'] - elem['height']) // 2 + elem['dy']
             canvas.alpha_composite(elem['content'], (x + elem['dx'], y))
@@ -306,6 +340,7 @@ def _layout_and_render(desc, icons_dir, def_icon_sz, def_font_sz, text_style,
 
         y_offset += row['total_height'] + row['v_spacing']
 
+    # 绘制连接线
     for i, row in enumerate(rows_info):
         if row['connect_to_next'] and i + 1 < len(rows_info):
             start_x1, y_top1, w1, h1, _ = row_positions[i]
@@ -314,11 +349,31 @@ def _layout_and_render(desc, icons_dir, def_icon_sz, def_font_sz, text_style,
             y1 = y_top1 + h1
             x2 = start_x2 + w2 / 2
             y2 = y_top2
-            line_color = row['line_style'].get('color', 'white')
+            line_color = _normalize_color(row['line_style'].get('color', 'white'))
             line_width = row['line_style'].get('width', 2)
             draw.line((x1, y1, x2, y2), fill=line_color, width=line_width)
 
     return canvas
+
+
+def _extract_location_name(desc):
+    """从图片描述中提取 location 后面的距离文本（如 "5km"）"""
+    norm = _normalize_desc(desc)
+    if not norm:
+        return None
+    first_row = norm[0]
+    if not first_row:
+        return None
+    if isinstance(first_row[0], dict):
+        items = first_row[1:]
+    else:
+        items = first_row
+    for i, it in enumerate(items):
+        if isinstance(it, str) and it.lower() == 'map-pin.svg' and i + 1 < len(items):
+            next_item = items[i + 1]
+            if isinstance(next_item, str) and not next_item.lower().endswith(('.svg', '.png', '.jpg', '.jpeg', '.gif', '.bmp')):
+                return next_item.strip()
+    return None
 
 
 def generate_images(descriptions, icons_dir, output_dir,
@@ -374,7 +429,14 @@ def generate_images(descriptions, icons_dir, output_dir,
                                  default_icon_size, default_font_size,
                                  text_style, margin, h_spacing, v_spacing,
                                  font_path)
-        out_path = os.path.join(output_dir, f'output_{idx + 1}.png')
+        distance = _extract_location_name(desc)
+        if distance:
+            safe_name = re.sub(r'[\\/*?:"<>|]', '', distance)
+            safe_name = safe_name.replace(' ', '_')
+            out_filename = f"{safe_name}.png"
+        else:
+            out_filename = f"output_{idx + 1}.png"
+        out_path = os.path.join(output_dir, out_filename)
         img.save(out_path, 'PNG')
         generated_files.append(out_path)
         print(f"已生成: {out_path}")
@@ -382,41 +444,83 @@ def generate_images(descriptions, icons_dir, output_dir,
     return generated_files
 
 
+def load_config(config_path="config.json"):
+    """从 JSON 文件加载 pictures 配置，若文件不存在则创建默认配置"""
+    default_pictures = [
+        [
+            [
+                {
+                    "icon_size": 38,
+                    "font_size": 40,
+                    "h_spacing": 10,
+                    "v_spacing": 10,
+                    "text_style": {
+                        "color": "#FFEAA7",
+                        "stroke": {"width": 2, "color": "#FF0000"},
+                        "shadow": {"offset": [1, 1], "color": [0, 0, 0, 12]},
+                        "stretch": 1.2
+                    },
+                    "connect_to_next": False,
+                    "line_style": {"color": "white", "width": 2}
+                },
+                "map-pin.svg", "5km", "stopwatch-red.svg", "55分钟"
+            ],
+            [
+                {
+                    "icon_size": 60,
+                    "font_size": 24,
+                    "background_color": "white",
+                    "border": {"color": "white", "width": 3, "radius": 20, "padding": 8}
+                },
+                "sponge.png", "water.svg", "drink.svg", "banana.png", "shower.svg", "restroom.svg", "medical.svg"
+            ]
+        ],
+        [
+            [
+                {
+                    "icon_size": 38,
+                    "font_size": 40,
+                    "h_spacing": 10,
+                    "v_spacing": 10,
+                    "text_style": {
+                        "color": "#FFEAA7",
+                        "stroke": {"width": 2, "color": "#FF0000"},
+                        "shadow": {"offset": [1, 1], "color": [0, 0, 0, 12]},
+                        "stretch": 1.2
+                    },
+                    "connect_to_next": False,
+                    "line_style": {"color": "white", "width": 2}
+                },
+                "map-pin.svg", "10km", "stopwatch-red.svg", "1小时30分"
+            ],
+            [
+                {
+                    "icon_size": 60,
+                    "font_size": 24,
+                    "background_color": "white",
+                    "border": {"color": "white", "width": 3, "radius": 20, "padding": 8}
+                },
+                "sponge.png", "water.svg", "drink.svg", "banana.png", "shower.svg", "restroom.svg", "medical.svg"
+            ]
+        ]
+    ]
+
+    if os.path.exists(config_path):
+        with open(config_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    else:
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(default_pictures, f, ensure_ascii=False, indent=2)
+        print(f"已创建默认配置文件: {config_path}，请根据需要修改后重新运行脚本。")
+        return default_pictures
+
+
 if __name__ == '__main__':
     ICONS_DIR = './assert'
     OUTPUT_DIR = './output_images'
 
-    # 示例：同时使用 SVG 和 PNG 图片
-    pictures = [
-        [
-            [
-                {
-                    'icon_size': 38,
-                    'font_size': 40,
-                    'h_spacing': 10,
-                    'v_spacing': 10,
-                    'text_style': {
-                        'color': '#FFEAA7',
-                        'stroke': {'width': 2, 'color': '#FF0000'},
-                        'shadow': {'offset': (1, 1), 'color': (0, 0, 0, 12)},
-                        'stretch': 1.2
-                    },
-                    'connect_to_next': False,
-                    'line_style': {'color': 'white', 'width': 2}
-                },
-                'location.svg', '5km','stopwatch-red.svg','55分钟'          # SVG 图标
-            ],
-            [
-                {
-                    'icon_size': 60,
-                    'font_size': 24,
-                    'background_color': 'white',
-                    'border': {'color': 'white', 'width': 3, 'radius': 20, 'padding': 8},
-                },
-                'sponge.png', 'water.svg','drink1.svg','banana.png','shower.svg','restroom.svg','medical.svg'      # PNG 和 SVG 混合
-            ]
-        ]
-    ]
+    # 从外部 JSON 文件加载图片配置
+    pictures = load_config("config.json")
 
     generate_images(pictures, ICONS_DIR, OUTPUT_DIR,
                     default_icon_size=48,
