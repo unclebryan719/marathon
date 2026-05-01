@@ -14,40 +14,29 @@ DEFAULT_TEXT_COLOR = "black"
 DEFAULT_TEXT_STROKE = None
 DEFAULT_TEXT_SHADOW = None
 DEFAULT_TEXT_GRADIENT = None
+DEFAULT_TEXT_STRETCH = 1.0
 MARGIN = 20
 H_SPACING = 12
 V_SPACING = 12
 
 # ======================= 预定义文本样式库 ========================
 TEXT_STYLES = {
-    'title': {'color': '#FFFFFF', 'stroke': {'width': 2, 'color': '#000000'}, 'shadow': {'offset': (2, 2), 'color': (0, 0, 0, 76)}, 'gradient': None},
-    'neon': {'color': '#00FFCC', 'stroke': {'width': 1, 'color': '#00FFCC'}, 'shadow': {'offset': (0, 0), 'color': '#00FFCC'}, 'gradient': None},
-    'metal': {'color': None, 'stroke': {'width': 1, 'color': '#AAAAAA'}, 'shadow': {'offset': (1, 1), 'color': (0, 0, 0, 51)}, 'gradient': {'colors': ['#E0E0E0', '#808080'], 'direction': 'vertical'}},
-    'candy': {'color': None, 'stroke': {'width': 2, 'color': '#FFFFFF'}, 'shadow': {'offset': (2, 2), 'color': (0, 0, 0, 25)}, 'gradient': {'colors': ['#FFB6C1', '#FF69B4'], 'direction': 'horizontal'}},
-    'vintage': {'color': '#4A3B32', 'stroke': None, 'shadow': {'offset': (1, 1), 'color': '#D2B48C'}, 'gradient': None},
-    'highlight': {'color': '#FFFFFF', 'stroke': {'width': 2, 'color': '#FF0000'}, 'shadow': {'offset': (2, 2), 'color': (0, 0, 0, 127)}, 'gradient': None},
-    'soft_cream': {'color': None, 'stroke': None, 'shadow': {'offset': (1, 1), 'color': (0, 0, 0, 30)}, 'gradient': {'colors': ['#FDFBF7', '#F4EADB'], 'direction': 'vertical'}},
-    'watercolor': {'color': None, 'stroke': {'width': 1, 'color': 'rgba(255,255,255,0.5)'}, 'shadow': {'offset': (2, 2), 'color': (0, 0, 0, 20)}, 'gradient': {'colors': ['#C5E4FF', '#E0D4FF'], 'direction': 'horizontal'}},
-    'morandi_pink': {'color': '#D9B8C4', 'stroke': None, 'shadow': {'offset': (2, 2), 'color': (0, 0, 0, 20)}, 'gradient': None},
-    'amber_glow': {'color': None, 'stroke': None, 'shadow': {'offset': (0, 2), 'color': (255, 200, 100, 50)}, 'gradient': {'colors': ['#FFE6C7', '#FFCC99'], 'direction': 'vertical'}},
-    'glass': {'color': '#FFFFFF', 'stroke': {'width': 1, 'color': 'rgba(255,255,255,0.6)'}, 'shadow': {'offset': (0, 2), 'color': (200, 200, 200, 30)}, 'gradient': None},
-    'macaron_mint': {'color': '#A8E6CF', 'stroke': None, 'shadow': {'offset': (1, 1), 'color': (0, 0, 0, 15)}, 'gradient': None},
-    'macaron_peach': {'color': '#FFD3B6', 'stroke': None, 'shadow': {'offset': (1, 1), 'color': (0, 0, 0, 15)}, 'gradient': None},
-    'macaron_lavender': {'color': '#C7CEE6', 'stroke': None, 'shadow': {'offset': (1, 1), 'color': (0, 0, 0, 20)}, 'gradient': None},
-'macaron_butter_bold': {
-    'color': '#FFEAA7',
-    'stroke': {'width': 1, 'color': '#FFEAA7'},
-    'shadow': {'offset': (1, 1), 'color': (0, 0, 0, 15)},
-    'gradient': None
-},
-'highlight_bold': {
-    'color': '#FFFFFF',
-    'stroke': {'width': 2, 'color': '#FF0000'},
-    'shadow': {'offset': (2, 2), 'color': (0, 0, 0, 127)},
-    'gradient': None
-},
-    'macaron_butter': {'color': '#FFEAA7', 'stroke': None, 'shadow': {'offset': (1, 1), 'color': (0, 0, 0, 12)}, 'gradient': None},
-    'macaron_gradient': {'color': None, 'stroke': {'width': 1, 'color': 'rgba(255,255,255,0.4)'}, 'shadow': {'offset': (1, 1), 'color': (0, 0, 0, 15)}, 'gradient': {'colors': ['#FFB7B2', '#E2F0CB', '#B5E3D5'], 'direction': 'horizontal'}}
+    'title': {'color': '#FFFFFF', 'stroke': {'width': 2, 'color': '#000000'}, 'shadow': {'offset': (2, 2), 'color': (0, 0, 0, 76)}, 'gradient': None, 'stretch': 1.0},
+    'neon': {'color': '#00FFCC', 'stroke': {'width': 1, 'color': '#00FFCC'}, 'shadow': {'offset': (0, 0), 'color': '#00FFCC'}, 'gradient': None, 'stretch': 1.0},
+    'metal': {'color': None, 'stroke': {'width': 1, 'color': '#AAAAAA'}, 'shadow': {'offset': (1, 1), 'color': (0, 0, 0, 51)}, 'gradient': {'colors': ['#E0E0E0', '#808080'], 'direction': 'vertical'}, 'stretch': 1.0},
+    'candy': {'color': None, 'stroke': {'width': 2, 'color': '#FFFFFF'}, 'shadow': {'offset': (2, 2), 'color': (0, 0, 0, 25)}, 'gradient': {'colors': ['#FFB6C1', '#FF69B4'], 'direction': 'horizontal'}, 'stretch': 1.0},
+    'vintage': {'color': '#4A3B32', 'stroke': None, 'shadow': {'offset': (1, 1), 'color': '#D2B48C'}, 'gradient': None, 'stretch': 1.0},
+    'highlight': {'color': '#FFFFFF', 'stroke': {'width': 2, 'color': '#FF0000'}, 'shadow': {'offset': (2, 2), 'color': (0, 0, 0, 127)}, 'gradient': None, 'stretch': 1.0},
+    'soft_cream': {'color': None, 'stroke': None, 'shadow': {'offset': (1, 1), 'color': (0, 0, 0, 30)}, 'gradient': {'colors': ['#FDFBF7', '#F4EADB'], 'direction': 'vertical'}, 'stretch': 1.0},
+    'watercolor': {'color': None, 'stroke': {'width': 1, 'color': 'rgba(255,255,255,0.5)'}, 'shadow': {'offset': (2, 2), 'color': (0, 0, 0, 20)}, 'gradient': {'colors': ['#C5E4FF', '#E0D4FF'], 'direction': 'horizontal'}, 'stretch': 1.0},
+    'morandi_pink': {'color': '#D9B8C4', 'stroke': None, 'shadow': {'offset': (2, 2), 'color': (0, 0, 0, 20)}, 'gradient': None, 'stretch': 1.0},
+    'amber_glow': {'color': None, 'stroke': None, 'shadow': {'offset': (0, 2), 'color': (255, 200, 100, 50)}, 'gradient': {'colors': ['#FFE6C7', '#FFCC99'], 'direction': 'vertical'}, 'stretch': 1.0},
+    'glass': {'color': '#FFFFFF', 'stroke': {'width': 1, 'color': 'rgba(255,255,255,0.6)'}, 'shadow': {'offset': (0, 2), 'color': (200, 200, 200, 30)}, 'gradient': None, 'stretch': 1.0},
+    'macaron_mint': {'color': '#A8E6CF', 'stroke': None, 'shadow': {'offset': (1, 1), 'color': (0, 0, 0, 15)}, 'gradient': None, 'stretch': 1.0},
+    'macaron_peach': {'color': '#FFD3B6', 'stroke': None, 'shadow': {'offset': (1, 1), 'color': (0, 0, 0, 15)}, 'gradient': None, 'stretch': 1.0},
+    'macaron_lavender': {'color': '#C7CEE6', 'stroke': None, 'shadow': {'offset': (1, 1), 'color': (0, 0, 0, 20)}, 'gradient': None, 'stretch': 1.0},
+    'macaron_butter': {'color': '#FFEAA7', 'stroke': None, 'shadow': {'offset': (1, 1), 'color': (0, 0, 0, 12)}, 'gradient': None, 'stretch': 1.0},
+    'macaron_gradient': {'color': None, 'stroke': {'width': 1, 'color': 'rgba(255,255,255,0.4)'}, 'shadow': {'offset': (1, 1), 'color': (0, 0, 0, 15)}, 'gradient': {'colors': ['#FFB7B2', '#E2F0CB', '#B5E3D5'], 'direction': 'horizontal'}, 'stretch': 1.0}
 }
 
 
@@ -92,7 +81,7 @@ def _apply_gradient(img, colors, direction='vertical'):
     img.paste(grad, (0, 0), grad)
 
 
-def _render_text(text, font_size, font_path, color, stroke, shadow, gradient):
+def _render_text(text, font_size, font_path, color, stroke, shadow, gradient, stretch=1.0):
     font = _load_font(font_size, font_path)
     bbox = font.getbbox(text)
     tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
@@ -119,34 +108,59 @@ def _render_text(text, font_size, font_path, color, stroke, shadow, gradient):
         draw.text((x, y), text, font=font, fill='white')
     if gradient and 'colors' in gradient:
         _apply_gradient(img, gradient['colors'], gradient.get('direction', 'vertical'))
-    return img.crop(img.getbbox())
+
+    img = img.crop(img.getbbox())
+    if stretch != 1.0:
+        new_w = max(1, int(img.width * stretch))
+        img = img.resize((new_w, img.height), Image.Resampling.LANCZOS)
+    return img
 
 
-def _load_icon(path, height):
+def _load_image(path, target_height):
+    """
+    统一加载图片（支持 SVG 和 PNG/JPEG 等）。
+    - 如果后缀是 .svg，使用 cairosvg 渲染为 PNG 并转为 PIL Image。
+    - 否则直接用 PIL 打开，并调整高度到 target_height（保持宽高比），转为 RGBA。
+    """
+    ext = os.path.splitext(path)[1].lower()
     try:
-        png_data = cairosvg.svg2png(url=path, output_height=height)
-        return Image.open(io.BytesIO(png_data)).convert('RGBA')
+        if ext == '.svg':
+            png_data = cairosvg.svg2png(url=path, output_height=target_height)
+            img = Image.open(io.BytesIO(png_data)).convert('RGBA')
+        else:
+            img = Image.open(path).convert('RGBA')
+            # 按比例缩放高度
+            ratio = target_height / img.height
+            new_width = int(img.width * ratio)
+            if new_width > 0 and target_height > 0:
+                img = img.resize((new_width, target_height), Image.Resampling.LANCZOS)
+        return img
     except Exception as e:
-        print(f"加载图标失败 {path}: {e}")
-        return Image.new('RGBA', (height, height), (255, 0, 0, 128))
+        print(f"加载图片失败 {path}: {e}")
+        # 返回一个红色占位块
+        return Image.new('RGBA', (target_height, target_height), (255, 0, 0, 128))
 
 
 def _parse_element(item, icons_dir, def_icon_sz, def_font_sz, text_style, font_path):
     if isinstance(item, str):
-        if item.lower().endswith('.svg'):
-            img = _load_icon(os.path.join(icons_dir, item), def_icon_sz)
+        # 判断是否为图片文件（支持 .svg, .png, .jpg, .jpeg, .gif 等）
+        image_extensions = ('.svg', '.png', '.jpg', '.jpeg', '.gif', '.bmp')
+        if item.lower().endswith(image_extensions):
+            img = _load_image(os.path.join(icons_dir, item), def_icon_sz)
             return {'type': 'icon', 'content': img, 'width': img.width, 'height': img.height, 'dx': 0, 'dy': 0}
         else:
+            stretch = text_style.get('stretch', DEFAULT_TEXT_STRETCH)
             img = _render_text(item, def_font_sz, font_path,
                                text_style.get('color', DEFAULT_TEXT_COLOR),
                                text_style.get('stroke', DEFAULT_TEXT_STROKE),
                                text_style.get('shadow', DEFAULT_TEXT_SHADOW),
-                               text_style.get('gradient', DEFAULT_TEXT_GRADIENT))
+                               text_style.get('gradient', DEFAULT_TEXT_GRADIENT),
+                               stretch)
             return {'type': 'icon', 'content': img, 'width': img.width, 'height': img.height, 'dx': 0, 'dy': 0}
     elif isinstance(item, dict):
         if 'file' in item:
             height = item.get('height', def_icon_sz)
-            img = _load_icon(os.path.join(icons_dir, item['file']), height)
+            img = _load_image(os.path.join(icons_dir, item['file']), height)
             w = item.get('width', img.width)
             if w != img.width:
                 img = img.resize((w, img.height), Image.Resampling.LANCZOS)
@@ -162,11 +176,13 @@ def _parse_element(item, icons_dir, def_icon_sz, def_font_sz, text_style, font_p
             style = text_style.copy()
             style.update(item.get('style', {}))
             font_sz = item.get('font_size', def_font_sz)
+            stretch = style.get('stretch', DEFAULT_TEXT_STRETCH)
             img = _render_text(item['text'], font_sz, font_path,
                                style.get('color', DEFAULT_TEXT_COLOR),
                                style.get('stroke', DEFAULT_TEXT_STROKE),
                                style.get('shadow', DEFAULT_TEXT_SHADOW),
-                               style.get('gradient', DEFAULT_TEXT_GRADIENT))
+                               style.get('gradient', DEFAULT_TEXT_GRADIENT),
+                               stretch)
             w = item.get('width', img.width)
             if w != img.width:
                 img = img.resize((w, img.height), Image.Resampling.LANCZOS)
@@ -213,6 +229,8 @@ def _layout_and_render(desc, icons_dir, def_icon_sz, def_font_sz, text_style,
         v_sp = config.get('v_spacing', v_spacing)
         border = config.get('border')
         background_color = config.get('background_color')
+        connect_to_next = config.get('connect_to_next', False)
+        line_style = config.get('line_style', {})
         row_text_style = text_style.copy()
         row_text_style.update(config.get('text_style', {}))
 
@@ -247,7 +265,9 @@ def _layout_and_render(desc, icons_dir, def_icon_sz, def_font_sz, text_style,
             'border_width': border_width,
             'pad_x': pad_x,
             'pad_y': pad_y,
-            'background_color': background_color
+            'background_color': background_color,
+            'connect_to_next': connect_to_next,
+            'line_style': line_style
         })
 
     if not rows_info:
@@ -258,14 +278,16 @@ def _layout_and_render(desc, icons_dir, def_icon_sz, def_font_sz, text_style,
     canvas = Image.new('RGBA', (canvas_width, canvas_height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(canvas)
 
+    row_positions = []
+
     y_offset = margin
     for row in rows_info:
         start_x = margin + (canvas_width - 2 * margin - row['total_width']) // 2
+        row_positions.append((start_x, y_offset, row['total_width'], row['total_height'], row['v_spacing']))
         inner_x = start_x + row['pad_x']
         inner_y = y_offset + row['pad_y']
         x = inner_x
 
-        # 合并背景与边框：如果有背景色或有边框，直接绘制圆角矩形（填充+描边）
         if row['background_color'] or row['border']:
             rect = [start_x, y_offset, start_x + row['total_width'], y_offset + row['total_height']]
             radius = row['border'].get('radius', 0) if row['border'] else 0
@@ -277,13 +299,24 @@ def _layout_and_render(desc, icons_dir, def_icon_sz, def_font_sz, text_style,
             else:
                 draw.rectangle(rect, fill=fill_color, outline=outline_color, width=outline_width)
 
-        # 绘制行内元素
         for elem in row['elements']:
             y = inner_y + (row['content_height'] - elem['height']) // 2 + elem['dy']
             canvas.alpha_composite(elem['content'], (x + elem['dx'], y))
             x += elem['width'] + row['h_spacing']
 
         y_offset += row['total_height'] + row['v_spacing']
+
+    for i, row in enumerate(rows_info):
+        if row['connect_to_next'] and i + 1 < len(rows_info):
+            start_x1, y_top1, w1, h1, _ = row_positions[i]
+            start_x2, y_top2, w2, h2, _ = row_positions[i+1]
+            x1 = start_x1 + w1 / 2
+            y1 = y_top1 + h1
+            x2 = start_x2 + w2 / 2
+            y2 = y_top2
+            line_color = row['line_style'].get('color', 'white')
+            line_width = row['line_style'].get('width', 2)
+            draw.line((x1, y1, x2, y2), fill=line_color, width=line_width)
 
     return canvas
 
@@ -295,6 +328,7 @@ def generate_images(descriptions, icons_dir, output_dir,
                     default_text_stroke=DEFAULT_TEXT_STROKE,
                     default_text_shadow=DEFAULT_TEXT_SHADOW,
                     default_text_gradient=DEFAULT_TEXT_GRADIENT,
+                    default_text_stretch=DEFAULT_TEXT_STRETCH,
                     margin=MARGIN, h_spacing=H_SPACING, v_spacing=V_SPACING,
                     font_path=None, text_style_name=None):
     os.makedirs(output_dir, exist_ok=True)
@@ -316,18 +350,22 @@ def generate_images(descriptions, icons_dir, output_dir,
             base['shadow'] = default_text_shadow
         if default_text_gradient != DEFAULT_TEXT_GRADIENT:
             base['gradient'] = default_text_gradient
+        if default_text_stretch != DEFAULT_TEXT_STRETCH:
+            base['stretch'] = default_text_stretch
         text_style = {
             'color': base.get('color', DEFAULT_TEXT_COLOR),
             'stroke': base.get('stroke', DEFAULT_TEXT_STROKE),
             'shadow': base.get('shadow', DEFAULT_TEXT_SHADOW),
-            'gradient': base.get('gradient', DEFAULT_TEXT_GRADIENT)
+            'gradient': base.get('gradient', DEFAULT_TEXT_GRADIENT),
+            'stretch': base.get('stretch', DEFAULT_TEXT_STRETCH)
         }
     else:
         text_style = {
             'color': default_text_color,
             'stroke': default_text_stroke,
             'shadow': default_text_shadow,
-            'gradient': default_text_gradient
+            'gradient': default_text_gradient,
+            'stretch': default_text_stretch
         }
 
     generated_files = []
@@ -348,19 +386,25 @@ if __name__ == '__main__':
     ICONS_DIR = './assert'
     OUTPUT_DIR = './output_images'
 
+    # 示例：同时使用 SVG 和 PNG 图片
     pictures = [
         [
             [
                 {
-                    'icon_size': 30,
-                    'font_size': 32,
+                    'icon_size': 38,
+                    'font_size': 40,
                     'h_spacing': 10,
-                    'v_spacing': 30,
-                    'background_color': 'white',
-                    'border': {'color': 'white', 'width': 3, 'radius': 20, 'padding': 8},
-                    'text_style': TEXT_STYLES['macaron_butter_bold']
+                    'v_spacing': 10,
+                    'text_style': {
+                        'color': '#FFEAA7',
+                        'stroke': {'width': 2, 'color': '#FF0000'},
+                        'shadow': {'offset': (1, 1), 'color': (0, 0, 0, 12)},
+                        'stretch': 1.2
+                    },
+                    'connect_to_next': False,
+                    'line_style': {'color': 'white', 'width': 2}
                 },
-                'map-pin.svg', '5km', 'clock.svg', '55分钟'
+                'location.svg', '5km','stopwatch-red.svg','55分钟'          # SVG 图标
             ],
             [
                 {
@@ -369,7 +413,7 @@ if __name__ == '__main__':
                     'background_color': 'white',
                     'border': {'color': 'white', 'width': 3, 'radius': 20, 'padding': 8},
                 },
-                'drink.svg', 'water.svg'
+                'sponge.png', 'water.svg','drink1.svg','banana.png','shower.svg','restroom.svg','medical.svg'      # PNG 和 SVG 混合
             ]
         ]
     ]
