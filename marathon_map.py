@@ -16,8 +16,8 @@ warnings.filterwarnings('ignore')
 # ================== 配置区域 ==================
 
 
-GPX_FILE = "/Users/unclebryan/Desktop/20260422_青岛西海岸.gpx"          # 修改为你的文件路径
-TIANDITU_KEY = "a54ebf354d5319c016319207becd3cbc"   # 替换为你在天地图申请的密钥
+GPX_FILE = "/Users/unclebryan/Documents/马拉松视频/4月7日~4月11日/202605170650青岛西海岸半马/20260422_青岛西海岸_修复后.gpx"          # 修改为你的文件路径
+TIANDITU_KEY = os.environ.get("TIANDITU_KEY", "")  # 或在此填写天地图 tk（勿提交到公开仓库）
 
 # 底图样式选择：
 # 'vec'   - 矢量地图（默认，颜色较淡）
