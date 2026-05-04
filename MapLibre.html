@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>GPX轨迹动画 - 自动居中/最大化 | 高德中文瓦片 | 4K导出</title>
+    <script src="https://unpkg.com/maplibre-gl@5.12.0/dist/maplibre-gl.js"></script>
+    <link href="https://unpkg.com/maplibre-gl@5.12.0/dist/maplibre-gl.css" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: system-ui, 'Segoe UI', Roboto, sans-serif; background: #1a1a2e; color: #eee; padding: 20px; }
+        .container { max-width: 1600px; margin: 0 auto; }
+        .panel { background: #0f0f1a; border-radius: 16px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+        .flex-row { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-end; }
+        .form-group { margin-bottom: 12px; }
+        label { display: block; font-size: 0.85rem; margin-bottom: 5px; color: #aaa; }
+        input, button { background: #2a2a3a; border: none; padding: 8px 16px; border-radius: 8px; color: white; font-size: 14px; }
+        button { background: #3b82f6; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        button:hover { background: #2563eb; }
+        button:disabled { background: #4b5563; cursor: not-allowed; }
+        .status { background: #00000066; border-radius: 12px; padding: 12px; font-family: monospace; font-size: 14px; margin-top: 12px; white-space: pre-wrap; }
+        #map-container { border-radius: 16px; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,0.5); margin-top: 16px; background: #000; }
+        .video-info { font-size: 12px; color: #aaa; margin-top: 8px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="panel">
+        <h2>🗺️ GPX轨迹动画 (自动居中并最大化轨迹)</h2>
+        <div class="flex-row">
+            <div class="form-group">
+                <label>📁 GPX文件</label>
+                <input type="file" id="gpxFile" accept=".gpx">
+            </div>
+            <div class="form-group">
+                <label>🧪 测试模式 (1080p/15fps)</label>
+                <input type="checkbox" id="testMode">
+            </div>
+            <div class="form-group">
+                <button id="startBtn" disabled>▶ 生成动画并录制</button>
+            </div>
+        </div>
+        <div id="status" class="status">⚡ 等待加载GPX文件...</div>
+        <div id="videoInfo" class="video-info"></div>
+    </div>
+    <div id="map-container">
+        <div id="map" style="width: 100%; height: 0; min-height: 500px;"></div>
+    </div>
+</div>
+
+<script>
+    // ---------- WGS84 → GCJ02 转换 ----------
+    const pi = Math.PI;
+    const a = 6378245.0;
+    const ee = 0.00669342162296594323;
+    function outOfChina(lon, lat) { return (lon < 72.004 || lon > 137.8347 || lat < 0.8293 || lat > 55.8271); }
+    function transformLat(x, y) {
+        let ret = -100.0 + 2.0 * x + 3.0 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * Math.sqrt(Math.abs(x));
+        ret += (20.0 * Math.sin(6.0 * x * pi) + 20.0 * Math.sin(2.0 * x * pi)) * 2.0 / 3.0;
+        ret += (20.0 * Math.sin(y * pi) + 40.0 * Math.sin(y / 3.0 * pi)) * 2.0 / 3.0;
+        ret += (160.0 * Math.sin(y / 12.0 * pi) + 320.0 * Math.sin(y * pi / 30.0)) * 2.0 / 3.0;
+        return ret;
+    }
+    function transformLon(x, y) {
+        let ret = 300.0 + x + 2.0 * y + 0.1 * x * x + 0.1 * x * y + 0.1 * Math.sqrt(Math.abs(x));
+        ret += (20.0 * Math.sin(6.0 * x * pi) + 20.0 * Math.sin(2.0 * x * pi)) * 2.0 / 3.0;
+        ret += (20.0 * Math.sin(x * pi) + 40.0 * Math.sin(x / 3.0 * pi)) * 2.0 / 3.0;
+        ret += (150.0 * Math.sin(x / 12.0 * pi) + 300.0 * Math.sin(x / 30.0 * pi)) * 2.0 / 3.0;
+        return ret;
+    }
+    function wgs84ToGcj02(lon, lat) {
+        if (outOfChina(lon, lat)) return [lon, lat];
+        let dLat = transformLat(lon - 105.0, lat - 35.0);
+        let dLon = transformLon(lon - 105.0, lat - 35.0);
+        let radLat = lat / 180.0 * pi;
+        let magic = Math.sin(radLat);
+        magic = 1 - ee * magic * magic;
+        let sqrtMagic = Math.sqrt(magic);
+        dLat = (dLat * 180.0) / ((a * (1 - ee)) / (magic * sqrtMagic) * pi);
+        dLon = (dLon * 180.0) / (a / sqrtMagic * Math.cos(radLat) * pi);
+        return [lon + dLon, lat + dLat];
+    }
+    function convertCoordsToGcj(lnglats) {
+        return lnglats.map(p => wgs84ToGcj02(p[0], p[1]));
+    }
+
+    // 解析GPX
+    async function parseGPX(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const parser = new DOMParser();
+                const xml = parser.parseFromString(e.target.result, "application/xml");
+                const trkpts = xml.querySelectorAll("trkpt");
+                if (trkpts.length === 0) reject("没有轨迹点");
+                const points = [];
+                for (let pt of trkpts) {
+                    const lat = parseFloat(pt.getAttribute("lat"));
+                    const lon = parseFloat(pt.getAttribute("lon"));
+                    if (!isNaN(lat) && !isNaN(lon)) points.push([lon, lat]);
+                }
+                if (points.length < 2) reject("轨迹点少于2个");
+                resolve(points);
+            };
+            reader.onerror = () => reject("文件读取失败");
+            reader.readAsText(file);
+        });
+    }
+
+    function haversineKm(lng1, lat1, lng2, lat2) {
+        const R = 6371;
+        const dLat = (lat2 - lat1) * pi / 180;
+        const dLng = (lng2 - lng1) * pi / 180;
+        const a = Math.sin(dLat/2)**2 + Math.cos(lat1*pi/180)*Math.cos(lat2*pi/180)*Math.sin(dLng/2)**2;
+        return R * 2 * Math.asin(Math.sqrt(Math.min(1, a)));
+    }
+
+    function truncateByDistance(pointsWgs, maxKm) {
+        if (maxKm <= 0) return pointsWgs;
+        let dists = [0];
+        for (let i=1; i<pointsWgs.length; i++) {
+            const d = haversineKm(pointsWgs[i-1][0], pointsWgs[i-1][1], pointsWgs[i][0], pointsWgs[i][1]);
+            dists.push(dists[dists.length-1] + d);
+        }
+        const total = dists[dists.length-1];
+        if (total <= maxKm) return pointsWgs;
+        const idx = dists.findIndex(d => d >= maxKm);
+        if (idx === 0) return [pointsWgs[0]];
+        const t = (maxKm - dists[idx-1]) / (dists[idx] - dists[idx-1]);
+        const lng = pointsWgs[idx-1][0] + t*(pointsWgs[idx][0]-pointsWgs[idx-1][0]);
+        const lat = pointsWgs[idx-1][1] + t*(pointsWgs[idx][1]-pointsWgs[idx-1][1]);
+        return [...pointsWgs.slice(0, idx), [lng, lat]];
+    }
+
+    // ---------- 全局变量 ----------
+    let map = null;
+    let animationId = null;
+    let mediaRecorder = null;
+    let recordedChunks = [];
+    let isRecording = false;
+    let routePointsGcj = [];
+    let durationSec = 15;
+    let frameRate = 30;
+    let videoWidth = 3840, videoHeight = 2160;
+    let testMode = false;
+
+    const statusDiv = document.getElementById('status');
+    const videoInfoDiv = document.getElementById('videoInfo');
+    const gpxInput = document.getElementById('gpxFile');
+    const testModeCheck = document.getElementById('testMode');
+    const startBtn = document.getElementById('startBtn');
+
+    function checkReady() {
+        startBtn.disabled = !gpxInput.files || !gpxInput.files[0];
+    }
+    gpxInput.addEventListener('change', checkReady);
+
+    async function startRecording(canvas, durationMs) {
+        recordedChunks = [];
+        const stream = canvas.captureStream(frameRate);
+        const mimeType = 'video/webm;codecs=vp9';
+        mediaRecorder = new MediaRecorder(stream, { mimeType });
+        mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) recordedChunks.push(e.data); };
+        mediaRecorder.onstop = () => {
+            const blob = new Blob(recordedChunks, { type: 'video/webm' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `gpx_track_${testMode?'test':'4k'}_${new Date().toISOString().slice(0,19)}.webm`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            statusDiv.innerHTML = '✅ 视频已下载! (WebM格式) 可使用 ffmpeg 转为 MP4。<br>ffmpeg -i input.webm -c:v libx264 -crf 18 -pix_fmt yuv420p output.mp4';
+            startBtn.disabled = false;
+            isRecording = false;
+        };
+        mediaRecorder.start();
+        setTimeout(() => {
+            if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop();
+        }, durationMs + 500);
+        return true;
+    }
+
+    function runAnimation(map, routeGcj, totalDistKm, durationSec, frameRate, marker, lineSourceId, onFrame) {
+        const totalFrames = Math.max(2, Math.floor(durationSec * frameRate));
+        const distances = routeGcj.map((_, i) => {
+            if (i===0) return 0;
+            let s=0;
+            for(let j=1; j<=i; j++) s += haversineKm(routeGcj[j-1][0], routeGcj[j-1][1], routeGcj[j][0], routeGcj[j][1]);
+            return s;
+        });
+        const totalDist = distances[distances.length-1];
+        let frame = 0;
+        let startTime = null;
+
+        function step(now) {
+            if (!startTime) startTime = now;
+            const elapsed = (now - startTime) / 1000;
+            const t = Math.min(1, elapsed / durationSec);
+            const targetDist = t * totalDist;
+            let idx = distances.findIndex(d => d >= targetDist);
+            if (idx === -1) idx = routeGcj.length-1;
+            let currentLngLat;
+            if (idx === 0) currentLngLat = routeGcj[0];
+            else {
+                const segT = (targetDist - distances[idx-1]) / (distances[idx] - distances[idx-1]);
+                const lng = routeGcj[idx-1][0] + segT*(routeGcj[idx][0]-routeGcj[idx-1][0]);
+                const lat = routeGcj[idx-1][1] + segT*(routeGcj[idx][1]-routeGcj[idx-1][1]);
+                currentLngLat = [lng, lat];
+            }
+            const linePoints = routeGcj.slice(0, idx+1);
+            if (idx < routeGcj.length-1 && targetDist < totalDist) linePoints.push(currentLngLat);
+            map.getSource(lineSourceId).setData({
+                type: 'Feature',
+                geometry: { type: 'LineString', coordinates: linePoints }
+            });
+            marker.setLngLat(currentLngLat);
+            const km = targetDist;
+            if (onFrame) onFrame(frame+1, totalFrames, km, totalDist);
+            frame++;
+            if (elapsed < durationSec && frame < totalFrames) {
+                animationId = requestAnimationFrame(step);
+            } else {
+                map.getSource(lineSourceId).setData({
+                    type: 'Feature',
+                    geometry: { type: 'LineString', coordinates: routeGcj }
+                });
+                marker.setLngLat(routeGcj[routeGcj.length-1]);
+                if (onFrame) onFrame(totalFrames, totalFrames, totalDist, totalDist);
+                cancelAnimationFrame(animationId);
+                animationId = null;
+                if (isRecording && mediaRecorder) {
+                    setTimeout(() => { if(mediaRecorder.state === 'recording') mediaRecorder.stop(); }, 200);
+                }
+                statusDiv.innerHTML += '<br>🏁 动画完成，视频生成中...';
+            }
+        }
+        animationId = requestAnimationFrame(step);
+        return totalFrames;
+    }
+
+    async function initAndStart(pointsWgs84) {
+        if (map) map.remove();
+        testMode = testModeCheck.checked;
+        if (testMode) {
+            videoWidth = 1920; videoHeight = 1080;
+            frameRate = 15;
+            durationSec = 8;
+        } else {
+            videoWidth = 3840; videoHeight = 2160;
+            frameRate = 30;
+            durationSec = 20;
+        }
+
+        let workingPointsWgs = pointsWgs84;
+        if (testMode) {
+            workingPointsWgs = truncateByDistance(pointsWgs84, 2.0);
+            statusDiv.innerHTML = `🧪 测试模式: 轨迹限2km (点 ${pointsWgs84.length}→${workingPointsWgs.length})`;
+        } else {
+            const totalDist = haversineKm(pointsWgs84[0][0], pointsWgs84[0][1], pointsWgs84[pointsWgs84.length-1][0], pointsWgs84[pointsWgs84.length-1][1]);
+            statusDiv.innerHTML = `🎬 4K模式: 轨迹全长 ${totalDist.toFixed(2)} km, ${workingPointsWgs.length} 点`;
+        }
+
+        routePointsGcj = convertCoordsToGcj(workingPointsWgs);
+        let minLng = Infinity, maxLng = -Infinity, minLat = Infinity, maxLat = -Infinity;
+        routePointsGcj.forEach(p => {
+            minLng = Math.min(minLng, p[0]); maxLng = Math.max(maxLng, p[0]);
+            minLat = Math.min(minLat, p[1]); maxLat = Math.max(maxLat, p[1]);
+        });
+        // 避免边界为0（单点轨迹或者异常）
+        if (maxLng - minLng < 1e-7) { minLng -= 0.001; maxLng += 0.001; }
+        if (maxLat - minLat < 1e-7) { minLat -= 0.001; maxLat += 0.001; }
+        const bounds = [[minLng, minLat], [maxLng, maxLat]];
+        console.log('最终GCJ边界:', bounds);   // 调试用
+
+        // 设置地图容器尺寸
+        const mapContainer = document.getElementById('map');
+        mapContainer.style.width = `${videoWidth}px`;
+        mapContainer.style.height = `${videoHeight}px`;
+
+        map = new maplibregl.Map({
+            container: 'map',
+            style: {
+                version: 8,
+                sources: {
+                    'gaode-raster': {
+                        type: 'raster',
+                        tiles: [
+                            'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+                            'https://webrd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+                            'https://webrd03.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+                            'https://webrd04.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}'
+                        ],
+                        tileSize: 256,
+                        attribution: '© 高德地图'
+                    }
+                },
+                layers: [{ id: 'gaode', type: 'raster', source: 'gaode-raster', minzoom: 2, maxzoom: 18 }]
+            },
+            // 不设置 center/zoom，完全由 fitBounds 决定
+            preserveDrawingBuffer: true,
+            antialias: true
+        });
+
+        // 等待地图样式加载
+        map.on('load', () => {
+            // 添加图层和标记
+            map.addSource('route', {
+                type: 'geojson',
+                data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } }
+            });
+            map.addLayer({
+                id: 'route-line',
+                type: 'line',
+                source: 'route',
+                paint: { 'line-color': '#e53935', 'line-width': 4, 'line-opacity': 0.9 }
+            });
+            new maplibregl.Marker({ color: '#22c55e', scale: 0.8 }).setLngLat(routePointsGcj[0]).addTo(map);
+            new maplibregl.Marker({ color: '#ef4444', scale: 0.8 }).setLngLat(routePointsGcj[routePointsGcj.length-1]).addTo(map);
+            const movingMarker = new maplibregl.Marker({ color: '#ff7043', scale: 1.2 }).setLngLat(routePointsGcj[0]).addTo(map);
+
+            // 强制将视图定位到轨迹边界，无内边距，立即跳转
+            map.fitBounds(bounds, { padding: 0, duration: 0, linear: true });
+
+            // 等待相机移动完成 (fitBounds 是异步的，可能触发 moveend)
+            const onMoveEnd = async () => {
+                map.off('moveend', onMoveEnd);
+                // 再确保一次边界（有时因为瓦片加载会轻微偏移）
+                map.fitBounds(bounds, { padding: 0, duration: 0 });
+                // 再给一点延迟让渲染稳定
+                setTimeout(async () => {
+                    const canvas = map.getCanvas();
+                    canvas.width = videoWidth;
+                    canvas.height = videoHeight;
+                    canvas.style.width = `${videoWidth}px`;
+                    canvas.style.height = `${videoHeight}px`;
+                    await startRecording(canvas, durationSec * 1000);
+                    isRecording = true;
+                    const totalDist = haversineKm(routePointsGcj[0][0], routePointsGcj[0][1], routePointsGcj[routePointsGcj.length-1][0], routePointsGcj[routePointsGcj.length-1][1]);
+                    const updateInfo = (frame, total, km, totalKm) => {
+                        videoInfoDiv.innerHTML = `🎞️ 帧: ${frame}/${total} | 里程: ${km.toFixed(2)}/${totalKm.toFixed(2)} km | 录制中...`;
+                    };
+                    runAnimation(map, routePointsGcj, totalDist, durationSec, frameRate, movingMarker, 'route', updateInfo);
+                }, 500);
+            };
+            map.on('moveend', onMoveEnd);
+            // 如果 fitBounds 没有触发 moveend（罕见）, 设置后备超时
+            setTimeout(() => {
+                if (!isRecording) {
+                    map.off('moveend', onMoveEnd);
+                    onMoveEnd();
+                }
+            }, 2000);
+        });
+    }
+
+    startBtn.onclick = async () => {
+        const file = gpxInput.files[0];
+        if (!file) return;
+        startBtn.disabled = true;
+        statusDiv.innerHTML = '📡 解析GPX文件...';
+        try {
+            const pointsWgs84 = await parseGPX(file);
+            statusDiv.innerHTML = `✅ 解析完成 (${pointsWgs84.length}点)。 正在最大化轨迹视图...`;
+            await initAndStart(pointsWgs84);
+        } catch(err) {
+            statusDiv.innerHTML = `❌ 错误: ${err}`;
+            startBtn.disabled = false;
+        }
+    };
+</script>
+</body>
+</html>

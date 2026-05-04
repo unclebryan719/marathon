@@ -13,7 +13,8 @@
 示例：
   .venv/bin/python gpx_map_video.py --gpx route.gpx --out map_route.mp4
   .venv/bin/python gpx_map_video.py --gpx route.gpx --provider esri --basemap-style imagery
-  试跑：--test（默认截断前 2 km，且未写 --duration/--fps/--map-zoom 时会自动用短时长、低帧率、zoom=15 加速）
+  试跑：--test（默认截断前 5 km，且未写 --duration/--fps/--map-zoom 时会自动用短时长、低帧率、zoom=15 加速）
+  只测前若干公里：--test-first-km 5 或仅 --test-first-km（默认 5 km），不必加 --test；与 --max-route-km 同时写时以后者为准
   或手写：--max-route-km 2 --duration 10 --fps 12
 """
 
@@ -301,6 +302,30 @@ def ensure_h264_even_pixel_frame(fig) -> None:
     fig.set_size_inches(wpx / dpi, hpx / dpi, forward=True)
 
 
+def make_animation_save_progress(total_frames: int):
+    """
+    供 matplotlib.animation.Animation.save(progress_callback=…) 使用；
+    在终端同一行刷新进度（约 40 次更新 + 首尾帧，避免刷屏或长期无输出）。
+    """
+    n = int(total_frames)
+
+    def progress_callback(current: int, total: int | None) -> None:
+        tot = int(total) if total is not None else n
+        if tot <= 0:
+            return
+        done = min(current + 1, tot)
+        step = max(1, tot // 40)
+        if done not in (1, tot) and done % step != 0:
+            return
+        pct = (done * 100) // tot
+        bar_len = 28
+        filled = min(bar_len, int(round(bar_len * done / tot)))
+        bar = "#" * filled + "-" * (bar_len - filled)
+        print(f"\r编码中 [{bar}] {done}/{tot}  {pct}%", end="", flush=True)
+
+    return progress_callback
+
+
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     R = 6371.0
     p1, p2 = math.radians(lat1), math.radians(lat2)
@@ -570,6 +595,21 @@ def _argv_has_long_option(argv: list[str], flag: str) -> bool:
     return False
 
 
+def resolve_route_truncation_km(args: argparse.Namespace, argv: list[str] | None = None) -> None:
+    """
+    --test-first-km：只生成从起点起前 KM 公里。
+    若命令行里已写 --max-route-km，则不覆盖（以 --max-route-km 为准）。
+    """
+    if argv is None:
+        argv = sys.argv
+    if _argv_has_long_option(argv, "--max-route-km"):
+        return
+    if not _argv_has_long_option(argv, "--test-first-km"):
+        return
+    if args.test_first_km is not None:
+        args.max_route_km = float(args.test_first_km)
+
+
 def apply_test_mode_defaults(args: argparse.Namespace) -> None:
     """
     --test：保证截断试跑路线；若未在命令行里单独指定 duration/fps/map-zoom，
@@ -579,7 +619,7 @@ def apply_test_mode_defaults(args: argparse.Namespace) -> None:
         return
     argv = sys.argv
     if args.max_route_km is None:
-        args.max_route_km = 2.0
+        args.max_route_km = 5.0
     touched: list[str] = []
     if not _argv_has_long_option(argv, "--duration"):
         args.duration = 12.0
@@ -660,12 +700,22 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=float,
         default=None,
         metavar="KM",
-        help="仅保留从起点起累计距离不超过 KM 的轨迹（试跑）；要明显加速出片请同时缩短 --duration、降低 --fps",
+        help="仅保留从起点起累计距离不超过 KM 的轨迹；要明显加速出片可配合缩短 --duration、降低 --fps",
+    )
+    p.add_argument(
+        "--test-first-km",
+        type=float,
+        nargs="?",
+        const=5.0,
+        default=None,
+        metavar="KM",
+        help="测试/预览：只渲染从起点起前 KM 公里（不必加 --test）。只写 --test-first-km 无数字时默认 5；"
+        "与 --max-route-km 同时出现时以 --max-route-km 为准",
     )
     p.add_argument(
         "--test",
         action="store_true",
-        help="试跑：默认 --max-route-km 2；未写 --duration/--fps/--map-zoom 时自动 12s、12fps、zoom=15 以加快出片",
+        help="试跑：未写 --max-route-km/--test-first-km 时默认只取前 5 km；未写 --duration/--fps/--map-zoom 时自动 12s、12fps、zoom=15",
     )
     p.add_argument(
         "--provider",
@@ -710,11 +760,17 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="单张瓦片 TCP 连接超时（秒）",
     )
     p.add_argument("--preview", action="store_true", help="仅弹出窗口预览首帧静态图（不导出视频）")
+    p.add_argument(
+        "--no-progress",
+        action="store_true",
+        help="导出 MP4 时不显示逐帧编码进度条（重定向日志或 CI 时可用）",
+    )
     return p
 
 
 def main() -> None:
     args = build_arg_parser().parse_args()
+    resolve_route_truncation_km(args)
     apply_test_mode_defaults(args)
     if not args.no_basemap:
         install_contextily_tile_request_patch(
@@ -864,7 +920,12 @@ def main() -> None:
     )
     ensure_h264_even_pixel_frame(fig)
     print(f"渲染 {total_frames} 帧 → {out}（约 {args.duration:.1f}s @ {args.fps}fps, dpi={args.dpi}）")
-    anim.save(out, writer=writer)
+    save_kw = {}
+    if not args.no_progress:
+        save_kw["progress_callback"] = make_animation_save_progress(total_frames)
+    anim.save(out, writer=writer, **save_kw)
+    if not args.no_progress:
+        print()
     plt.close(fig)
     print("完成")
 

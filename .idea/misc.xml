@@ -3,4 +3,5 @@
   <component name="Black">
     <option name="sdkName" value="marathon_track" />
   </component>
+  <component name="ProjectRootManager" version="2" project-jdk-name="marathon_track" project-jdk-type="Python SDK" />
 </project>
