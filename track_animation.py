@@ -20,7 +20,7 @@ from gpxpy.gpx import GPX, GPXTrack, GPXTrackSegment, GPXTrackPoint
 GPX_FILE = "/Users/unclebryan/Documents/马拉松视频/4月7日~4月11日/202605170650青岛西海岸半马/20260422_青岛西海岸_修复后.gpx"
 
 SPLIT_DISTANCE_M = 500
-TEST_ONLY = True
+TEST_ONLY = False
 TEST_SEGMENTS = 2
 
 FAST_MODE = False

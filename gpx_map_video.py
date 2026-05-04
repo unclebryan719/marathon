@@ -5,9 +5,11 @@
 
 默认高德矢量（栅格 style7）；可选 --basemap-style detail 用 style8 详图试不同路名注记。GPX 多为 WGS84，国内底图实为 GCJ-02，已自动对齐，勿与 OSM/Esri
 （WGS84）混用时出现二次偏移——若必须用国外底图请 --no-tile-fallback 并用 --assume-gcj02-track
-慎用。更清晰可调高 --dpi、--map-zoom（15~17）。注意：**map_zoom 只影响瓦片精细度，不改变画布英寸**；画布大小由
+慎用。更清晰可调高 --dpi、--map-zoom（15~17）、高德 detail 时 --gaode-tile-scale 2（512px 瓦片）。注意：**map_zoom 只影响瓦片精细度，不改变画布英寸**；画布大小由
 --fig-width/--fig-height/--dpi 决定；--auto-fig-aspect 会按轨迹形状改宽高比，并受 --fig-max-width 上限约束。
+静态地图类画面极易压缩，CRF 导出体积小属正常，与「地图是否锐利」基本无关；清晰度优先靠 dpi、fig 尺寸、map-zoom、瓦片 scale，以及 --basemap-interpolation nearest 减轻插值糊字。
 固定 16:9 等横屏若左右留白大，可加 --fill-figure-aspect 对称扩大可视经纬范围以铺满画布。
+手机全屏：竖屏用 --phone-portrait（9:16），横屏持握用 --phone-landscape（16:9）；二者都会自动 fill-figure-aspect。另可提高 --map-zoom / --dpi；栅格路名有限度，可缩短 --max-route-km 或减小 --margin-deg。
 默认已关闭经纬度刻度（干净地图）；要刻度请加 --show-lonlat-axis。
 
 示例：
@@ -167,6 +169,22 @@ def expand_wgs_viewport_to_figure_aspect(
 _CONTEXTILY_TILE_PATCH_INSTALLED = False
 
 
+def _rasterio_resampling(name: str):
+    """contextily 瓦片经纬度重投影所用的 rasterio 重采样方式。"""
+    from rasterio.enums import Resampling
+
+    key = name.strip().lower()
+    table = {
+        "nearest": Resampling.nearest,
+        "bilinear": Resampling.bilinear,
+        "cubic": Resampling.cubic,
+        "lanczos": Resampling.lanczos,
+    }
+    if key not in table:
+        raise ValueError(f"未知 basemap-warp-resampling: {name!r}，可选 {sorted(table)}")
+    return table[key]
+
+
 def install_contextily_tile_request_patch(
     *, connect_timeout_s: float = 30.0, read_timeout_s: float = 180.0
 ) -> None:
@@ -228,22 +246,47 @@ def install_contextily_tile_request_patch(
     _CONTEXTILY_TILE_PATCH_INSTALLED = True
 
 
-def add_basemap_to_axis(ax, prov: str, sty: str | None, tianditu_key: str | None, zoom: int | None) -> None:
+def add_basemap_to_axis(
+    ax,
+    prov: str,
+    sty: str | None,
+    tianditu_key: str | None,
+    zoom: int | None,
+    *,
+    gaode_tile_scale: int = 1,
+    basemap_interpolation: str = "bilinear",
+    basemap_warp_resampling: str = "bilinear",
+) -> None:
     """按当前 axes 的范围添加瓦片；axis 必须为与瓦片匹配的经纬度 CRS。"""
     import contextily as ctx
 
     crs = "EPSG:4326"
     z = zoom if zoom is not None else "auto"
+    rs = _rasterio_resampling(basemap_warp_resampling)
 
     prov = prov.lower()
     if prov == "tianditu":
         if not tianditu_key:
             raise RuntimeError("需要 --tianditu-key 或环境变量 TIANDITU_KEY")
-        add_tianditu_basemap(ax, sty, tianditu_key, z)
+        add_tianditu_basemap(
+            ax,
+            sty,
+            tianditu_key,
+            z,
+            interpolation=basemap_interpolation,
+            warp_resampling=rs,
+        )
         return
 
-    src = resolve_xyz_provider_source(prov, sty)
-    ctx.add_basemap(ax, crs=crs, source=src, zoom=z)
+    src = resolve_xyz_provider_source(prov, sty, gaode_tile_scale=gaode_tile_scale)
+    ctx.add_basemap(
+        ax,
+        crs=crs,
+        source=src,
+        zoom=z,
+        interpolation=basemap_interpolation,
+        resampling=rs,
+    )
 
 
 def figsize_matched_to_lonlat_extent(
@@ -453,12 +496,15 @@ _FALLBACK_TILE_PROVIDERS: list[tuple[str, str | None]] = [
 ]
 
 
-def resolve_xyz_provider_source(provider: str, basemap_style: str | None):
-    """返回 contextily XYZ 源对象（非 tianditu）。"""
+def resolve_xyz_provider_source(
+    provider: str, basemap_style: str | None, *, gaode_tile_scale: int = 1
+):
+    """返回 contextily XYZ 源对象（非 tianditu）。gaode_tile_scale 仅作用于高德 detail(style8) 自定义 URL（1→256px，2→512px）。"""
     import contextily as ctx
 
     p = provider.lower()
     s = (basemap_style or "").lower() if basemap_style else ""
+    gscale = 2 if int(gaode_tile_scale) == 2 else 1
 
     if p == "gaode":
         if s in ("sat", "satellite", "img"):
@@ -467,7 +513,7 @@ def resolve_xyz_provider_source(provider: str, basemap_style: str | None):
         if s in ("detail", "detailed", "style8", "8"):
             return (
                 "https://webrd01.is.autonavi.com/appmaptile?"
-                "lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}"
+                f"lang=zh_cn&size=1&scale={gscale}&style=8&x={{x}}&y={{y}}&z={{z}}"
             )
         return ctx.providers.Gaode.Normal
     if p == "osm":
@@ -494,19 +540,30 @@ def resolve_xyz_provider_source(provider: str, basemap_style: str | None):
 
 
 def add_tianditu_basemap(
-    ax, basemap_style: str | None, tianditu_key: str, zoom: int | str | None = "auto"
+    ax,
+    basemap_style: str | None,
+    tianditu_key: str,
+    zoom: int | str | None = "auto",
+    *,
+    interpolation: str = "bilinear",
+    warp_resampling=None,
 ) -> None:
     import contextily as ctx
+    from rasterio.enums import Resampling
 
     crs = "EPSG:4326"
     z = zoom if zoom is not None else "auto"
+    rs = warp_resampling if warp_resampling is not None else Resampling.bilinear
     style = (basemap_style or "vec").lower().replace("+", "_")
+    kw = {"interpolation": interpolation, "resampling": rs}
     if style in ("img_cia", "imgcia"):
-        ctx.add_basemap(ax, crs=crs, url=tianditu_tile_url("img", tianditu_key), zoom=z)
-        ctx.add_basemap(ax, crs=crs, url=tianditu_tile_url("cia", tianditu_key), zoom=z, alpha=0.92)
+        ctx.add_basemap(ax, crs=crs, url=tianditu_tile_url("img", tianditu_key), zoom=z, **kw)
+        ctx.add_basemap(
+            ax, crs=crs, url=tianditu_tile_url("cia", tianditu_key), zoom=z, alpha=0.92, **kw
+        )
         return
     layer = {"vec": "vec", "img": "img", "ter": "ter", "cia": "cia"}.get(style, "vec")
-    ctx.add_basemap(ax, crs=crs, url=tianditu_tile_url(layer, tianditu_key), zoom=z)
+    ctx.add_basemap(ax, crs=crs, url=tianditu_tile_url(layer, tianditu_key), zoom=z, **kw)
 
 
 def user_basemap_style_for(args: argparse.Namespace, provider: str) -> str | None:
@@ -572,7 +629,16 @@ def try_load_basemap(
                 ax.set_ylim(float(plats.min()) - margin_deg, float(plats.max()) + margin_deg)
             ax.set_aspect("equal", adjustable="box")
             tk = tianditu_key if prov == "tianditu" else None
-            add_basemap_to_axis(ax, prov, sty, tk, zm)
+            add_basemap_to_axis(
+                ax,
+                prov,
+                sty,
+                tk,
+                zm,
+                gaode_tile_scale=args.gaode_tile_scale,
+                basemap_interpolation=args.basemap_interpolation,
+                basemap_warp_resampling=args.basemap_warp_resampling,
+            )
             hint = (
                 "tianditu ({})".format(sty)
                 if prov == "tianditu"
@@ -608,6 +674,36 @@ def resolve_route_truncation_km(args: argparse.Namespace, argv: list[str] | None
         return
     if args.test_first_km is not None:
         args.max_route_km = float(args.test_first_km)
+
+
+def apply_phone_video_layout(args: argparse.Namespace) -> None:
+    """
+    手机全屏画布：竖屏 9:16 或横屏 16:9；窄边像素 = phone_short_edge_px。
+    与 --auto-fig-aspect 互斥；自动打开 fill-figure-aspect 减轻 equal 留白。
+    """
+    if not args.phone_portrait and not args.phone_landscape:
+        return
+    tag = "竖屏 9:16" if args.phone_portrait else "横屏 16:9"
+    if args.auto_fig_aspect:
+        print(f"提示: 已启用手机全屏模式（{tag}），忽略 --auto-fig-aspect")
+    args.auto_fig_aspect = False
+    dpi = float(args.dpi)
+    se = max(320, int(args.phone_short_edge_px))
+    se += se % 2
+    if args.phone_portrait:
+        sw = se
+        sh = int(round(sw * 16.0 / 9.0))
+        sh += sh % 2
+    else:
+        sh = se
+        sw = int(round(sh * 16.0 / 9.0))
+        sw += sw % 2
+    args.fig_width = sw / dpi
+    args.fig_height = sh / dpi
+    print(f"{tag} 画布: {sw}×{sh} px（{args.fig_width:.2f}×{args.fig_height:.2f} 英寸 @ dpi={args.dpi}）")
+    if not args.fill_figure_aspect:
+        args.fill_figure_aspect = True
+        print("提示: 已自动启用 --fill-figure-aspect（减轻 equal 留白）")
 
 
 def apply_test_mode_defaults(args: argparse.Namespace) -> None:
@@ -672,6 +768,24 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="对称扩大可视经纬范围，使包络宽高比≈画布英寸比，消除 16:9 等固定画布下 equal 产生的左右/上下大块留白（略多取周边底图）",
     )
+    _phone = p.add_mutually_exclusive_group()
+    _phone.add_argument(
+        "--phone-portrait",
+        action="store_true",
+        help="竖屏全屏 9:16（窄边宽 = phone-short-edge-px）；忽略 auto-fig-aspect，并自动 fill-figure-aspect",
+    )
+    _phone.add_argument(
+        "--phone-landscape",
+        action="store_true",
+        help="横屏持握全屏 16:9（窄边高 = phone-short-edge-px）；忽略 auto-fig-aspect，并自动 fill-figure-aspect",
+    )
+    p.add_argument(
+        "--phone-short-edge-px",
+        type=int,
+        default=1080,
+        metavar="PX",
+        help="与 --phone-portrait / --phone-landscape 联用：竖屏=视频宽度像素，横屏=视频高度像素；常用 1080，可试 1440、2160",
+    )
     p.add_argument(
         "--show-lonlat-axis",
         action="store_true",
@@ -692,7 +806,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--min-point-spacing-m",
         type=float,
-        default=8.0,
+        default=5.0,
         help="抽稀：相邻点最小间距（米），0 表示不抽稀",
     )
     p.add_argument(
@@ -765,6 +879,45 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="导出 MP4 时不显示逐帧编码进度条（重定向日志或 CI 时可用）",
     )
+    p.add_argument(
+        "--gaode-tile-scale",
+        type=int,
+        choices=(1, 2),
+        default=1,
+        help="仅高德 detail(style8) 瓦片：2 为 512px（高清），高 dpi 时路名更锐利，请求量更大",
+    )
+    p.add_argument(
+        "--basemap-interpolation",
+        default="bilinear",
+        choices=("nearest", "bilinear", "bicubic", "none"),
+        help="瓦片 imshow 插值：nearest 少抹糊路名但可能略锯齿；默认 bilinear（contextily 同款）",
+    )
+    p.add_argument(
+        "--basemap-warp-resampling",
+        default="bilinear",
+        choices=("nearest", "bilinear", "cubic", "lanczos"),
+        help="EPSG3857→经纬度重采样：默认 bilinear；可试 lanczos / cubic，或 nearest（几何略有锯齿）",
+    )
+    p.add_argument(
+        "--video-crf",
+        type=int,
+        default=18,
+        metavar="N",
+        help="libx264 质量模式（与 --video-bitrate-kbps 二选一生效）：越小越清晰，默认 18；不写码率时用此项",
+    )
+    p.add_argument(
+        "--video-bitrate-kbps",
+        type=int,
+        default=None,
+        metavar="KBPS",
+        help="固定平均视频码率（千比特/秒，例如 12000≈12Mbps）。指定后忽略 --video-crf。"
+        " 静态地图画面极易压缩，名义码率常远高于实际占用，提码率未必增大体积或更清晰。",
+    )
+    p.add_argument(
+        "--video-preset",
+        default="medium",
+        help="libx264 preset（ultrafast…veryslow）；越慢通常同等体积画质更好，默认 medium",
+    )
     return p
 
 
@@ -797,6 +950,8 @@ def main() -> None:
     m = args.margin_deg
     lon_min, lon_max = float(lons.min()), float(lons.max())
     lat_min, lat_max = float(lats.min()), float(lats.max())
+
+    apply_phone_video_layout(args)
 
     fig_w, fig_h = args.fig_width, args.fig_height
     if args.auto_fig_aspect:
@@ -912,14 +1067,34 @@ def main() -> None:
         return line, head, title
 
     anim = animation.FuncAnimation(fig, animate, frames=total_frames, interval=1000 / args.fps, blit=False)
-    writer = animation.FFMpegWriter(
-        fps=args.fps,
-        codec="libx264",
-        bitrate=12_000,
-        extra_args=["-pix_fmt", "yuv420p", "-movflags", "+faststart"],
-    )
+    v_extra = [
+        "-preset",
+        str(args.video_preset),
+        "-pix_fmt",
+        "yuv420p",
+        "-movflags",
+        "+faststart",
+    ]
+    if args.video_bitrate_kbps is not None:
+        writer = animation.FFMpegWriter(
+            fps=args.fps,
+            codec="libx264",
+            bitrate=int(args.video_bitrate_kbps),
+            extra_args=v_extra,
+        )
+        enc_note = f"bitrate≈{args.video_bitrate_kbps} kbps"
+    else:
+        writer = animation.FFMpegWriter(
+            fps=args.fps,
+            codec="libx264",
+            bitrate=-1,
+            extra_args=v_extra + ["-crf", str(int(args.video_crf))],
+        )
+        enc_note = f"CRF {args.video_crf}"
     ensure_h264_even_pixel_frame(fig)
-    print(f"渲染 {total_frames} 帧 → {out}（约 {args.duration:.1f}s @ {args.fps}fps, dpi={args.dpi}）")
+    print(
+        f"渲染 {total_frames} 帧 → {out}（约 {args.duration:.1f}s @ {args.fps}fps, dpi={args.dpi}, 编码 {enc_note}）"
+    )
     save_kw = {}
     if not args.no_progress:
         save_kw["progress_callback"] = make_animation_save_progress(total_frames)
