@@ -1,0 +1,132 @@
+{
+  "with_interval": true,
+  "overrides": [
+    {
+        "km": 3,
+        "anchor_km": 3,
+        "text_offset": [-10, 16],
+        "text_font_size": 24,
+        "text_color": "#ffffff",
+        "bg": "#1565c0"
+      },
+      {
+          "km": 4,
+          "anchor_km": 4,
+          "text_offset": [5, 20],
+          "text_font_size": 24,
+          "text_color": "#ffffff",
+          "bg": "#1565c0"
+        },
+      {
+          "km": 6,
+          "anchor_km": 6,
+          "text_offset": [-30, 5],
+          "text_font_size": 24,
+          "text_color": "#ffffff",
+          "bg": "#1565c0"
+        },
+        {
+            "km": 7,
+            "anchor_km": 7,
+            "text_offset": [-30, -5],
+            "text_font_size": 24,
+            "text_color": "#ffffff",
+            "bg": "#1565c0"
+          },
+          {
+              "km": 8,
+              "anchor_km": 8,
+              "text_offset": [-30, 0],
+              "text_font_size": 24,
+              "text_color": "#ffffff",
+              "bg": "#1565c0"
+            },
+            {
+                "km": 9,
+                "anchor_km": 9,
+                "text_offset": [-30, -5],
+                "text_font_size": 24,
+                "text_color": "#ffffff",
+                "bg": "#1565c0"
+              },
+              {
+                  "km": 10,
+                  "anchor_km": 10,
+                  "text_offset": [-30, 0],
+                  "text_font_size": 24,
+                  "text_color": "#ffffff",
+                  "bg": "#1565c0"
+                },
+    {
+        "km": 13,
+        "anchor_km": 13,
+        "text_offset": [-30, 0],
+        "text_font_size": 24,
+        "text_color": "#ffffff",
+        "bg": "#1565c0"
+      },
+      {
+          "km": 14,
+          "anchor_km": 14,
+          "text_offset": [30, 5],
+          "text_font_size": 24,
+          "text_color": "#ffffff",
+          "bg": "#1565c0"
+        },
+        {
+            "km": 15,
+            "anchor_km": 15,
+            "text_offset": [30, -10],
+            "text_font_size": 24,
+            "text_color": "#ffffff",
+            "bg": "#1565c0"
+          },
+      {
+          "km": 16,
+          "anchor_km": 16,
+          "text_offset": [30, -10],
+          "text_font_size": 24,
+          "text_color": "#ffffff",
+          "bg": "#1565c0"
+        },{
+            "km": 17,
+            "anchor_km": 17,
+            "text_offset": [30, -10],
+            "text_font_size": 24,
+            "text_color": "#ffffff",
+            "bg": "#1565c0"
+          },
+        {
+            "km": 18,
+            "anchor_km": 18,
+            "text_offset": [30, -10],
+            "text_font_size": 24,
+            "text_color": "#ffffff",
+            "bg": "#1565c0"
+          },
+          {
+              "km": 19,
+              "anchor_km": 19,
+              "text_offset": [30, -10],
+              "text_font_size": 24,
+              "text_color": "#ffffff",
+              "bg": "#1565c0"
+            },
+            {
+                "km": 20,
+                "anchor_km": 20,
+                "text_offset": [30, -10],
+                "text_font_size": 24,
+                "text_color": "#ffffff",
+                "bg": "#1565c0"
+              },
+              {
+                  "km": 21,
+                  "anchor_km": 21,
+                  "text_offset": [25, -20],
+                  "text_font_size": 24,
+                  "text_color": "#ffffff",
+                  "bg": "#1565c0"
+                }
+  ]
+}

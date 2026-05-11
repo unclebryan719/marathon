@@ -1,0 +1,22 @@
+{
+    "start": {
+      "text": "起点：",
+      "text_color": "#ffffff",
+      "text_offset": [80, 15],
+      "bg": "#1565c0",
+      "text_font_size": 20,
+      "show_dot": true,
+      "dot_color": "#43a047",
+      "dot_size": 85
+    },
+    "end": {
+      "text": "终点：金沙滩啤酒城海韵大道",
+      "text_color": "#ffffff",
+      "bg": "#1565c0",
+      "text_offset": [80, -15],
+      "text_font_size": 20,
+      "show_dot": true,
+      "dot_color":"#FF0000",
+      "dot_size": 85
+    }
+  }
