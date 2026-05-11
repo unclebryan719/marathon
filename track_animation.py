@@ -17,7 +17,7 @@ from moviepy.video.io.VideoFileClip import VideoFileClip
 from gpxpy.gpx import GPX, GPXTrack, GPXTrackSegment, GPXTrackPoint
 
 # ==================== 【配置参数】 ====================
-GPX_FILE = "/Users/unclebryan/Documents/马拉松视频/4月7日~4月11日/202605170650青岛西海岸半马/20260422_青岛西海岸_修复后.gpx"
+GPX_FILE = "/Users/unclebryan/Documents/马拉松视频/4月27日/202605170730北京大兴花马/20260508_大兴区花马_修复后.gpx"
 
 SPLIT_DISTANCE_M = 500
 TEST_ONLY = False
@@ -36,7 +36,7 @@ else:
     VIDEO_DURATION = 600
     print("🎬 高质量模式 - 10分钟视频")
 
-CLIMB_THRESHOLD = 1.2
+CLIMB_THRESHOLD = 1.3
 
 # ========== 【坡度计算配置】 ==========
 SLOPE_WINDOW_M = 100
@@ -45,7 +45,7 @@ SLOPE_YELLOW_THRESHOLD = 5.0
 MAX_SLOPE_FOR_COLOR = 15.0
 
 # ========== 【其他配置】 ==========
-POINT_FILTER_DISTANCE = 5          # 过滤冗余点的最小距离（米）
+POINT_FILTER_DISTANCE = 10          # 过滤冗余点的最小距离（米）
 FIG_WIDTH = 16
 FIG_HEIGHT = 1
 

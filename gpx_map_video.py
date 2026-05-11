@@ -10,22 +10,53 @@
 静态地图类画面极易压缩，CRF 导出体积小属正常，与「地图是否锐利」基本无关；清晰度优先靠 dpi、fig 尺寸、map-zoom、瓦片 scale，以及 --basemap-interpolation nearest 减轻插值糊字。
 固定 16:9 等横屏若左右留白大，可加 --fill-figure-aspect 对称扩大可视经纬范围以铺满画布。
 手机全屏：竖屏用 --phone-portrait（9:16），横屏持握用 --phone-landscape（16:9）；二者都会自动 fill-figure-aspect。另可提高 --map-zoom / --dpi；栅格路名有限度，可缩短 --max-route-km 或减小 --margin-deg。
+轨迹线：整段淡色底轨用 --route-full-color / --route-full-width / --route-full-alpha；随动画增长的实线用 --route-progress-color / --route-progress-width。
 默认已关闭经纬度刻度（干净地图）；要刻度请加 --show-lonlat-axis。
 
 示例：
   .venv/bin/python gpx_map_video.py --gpx route.gpx --out map_route.mp4
   .venv/bin/python gpx_map_video.py --gpx route.gpx --provider esri --basemap-style imagery
   试跑：--test（默认截断前 5 km，且未写 --duration/--fps/--map-zoom 时会自动用短时长、低帧率、zoom=15 加速）
+  只出一张静态图（不写 MP4）：--test-image，可选 --test-image-out、--test-image-progress（0=起点 1=终点，默认 0.5）
   只测前若干公里：--test-first-km 5 或仅 --test-first-km（默认 5 km），不必加 --test；与 --max-route-km 同时写时以后者为准
   或手写：--max-route-km 2 --duration 10 --fps 12
+
+完整视频导出后按公里切分：--split-video-by-km，步长 --split-video-km-step（默认 1，可与 --km-interval 一致如 0.5）；
+  输出目录默认为主视频同目录下「主文件名_km_segments/」。需系统 PATH 中有 ffmpeg。
+
+里程桩：加 --km-markers，可选 --km-interval、--km-format、颜色与圆角框等（见 --help）。
+  半公里桩（如 interval=0.5）请勿用 {km:.0f} 取整，否则 1.5 与 2.0 都会显示「2 km」像重复；改用 {km:.1f} 或 {km:g}。
+  某公里单独加字/图、改锚点位置：--km-overrides-json（与 --km-markers 联用），格式见下方。
+景点/地标：--poi-json 指向 UTF-8 JSON 文件，格式见下方。
+起点/终点：--route-endpoints-json，JSON 对象含 \"start\"、\"end\"（可只写其一）；字段与 POI 相同（text、图、text_offset、样式等），另可选 show_dot、dot_size、dot_color、dot_edgecolor、dot_edgewidth；锚在轨迹首/末点（已与底图坐标一致）。
+  示例：{\"start\": {\"text\": \"起点\", \"bg\": \"#1565c0\", \"text_offset\": [0,-22]}, \"end\": {\"text\": \"终点\", \"image\": \"flag.png\", \"image_zoom\": 0.12}}
+
+POI JSON 示例（数组；路径相对 JSON 所在目录）：
+  lon/lat 默认按 WGS84；若坐标来自高德/腾讯地图界面，请加 \"coords\": \"gcj02\"，否则会二次偏移。
+  [
+    {"lon": 120.12, "lat": 36.05, "text": "起点", "bg": "#1565c0"},
+    {"lon": 120.20, "lat": 36.08, "text": "高德抄的点", "coords": "gcj02"}
+  ]
+可写字段（均有默认值）：text, fontsize, color, bg, edge, boxstyle, edge_width, fontweight, ha, va，
+text_alpha, bg_alpha；image, image_zoom, image_offset [dx,dy], text_offset [dx,dy]（单位：点）。
+
+里程桩 JSON（--km-overrides-json）：(1) 仅数组；(2) 或对象，可含 overrides、show_km/only_km、hide_km/skip_km、with_interval。
+  **白名单（默认）**：show_km / only_km 非空且 **未** 设 with_interval:true 时，**只画**列表中的公里，--km-interval 不参与选桩（overrides 仅作用于已选中的 km）。
+  **与整公里并用**：设 **\"with_interval\": true** 时，先按 --km-interval（及 km-include-start）生成桩，再并入 overrides 里的 km，再把 show_km/only_km 中的公里并入（可用来标半公里等）；最后减 hide_km。
+  仅要「整公里 + 某几个自定义桩」时，也可不写 show_km，只在 overrides 里写那些 km，会自动并入。
+  hide_km / skip_km：从当前集合中去掉这些公里。
+  overrides：桩覆盖数组，每条须含 \"km\"。
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import os
 import re
+import shutil
+import subprocess
 import sys
 from datetime import datetime
 
@@ -37,6 +68,7 @@ import matplotlib.animation as animation
 import matplotlib.patheffects as pe
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.offsetbox import AnnotationBbox, OffsetImage
 
 
 def _china_gcj_range_mask(lons: np.ndarray, lats: np.ndarray) -> np.ndarray:
@@ -94,6 +126,22 @@ def wgs84_to_gcj02(lons: np.ndarray, lats: np.ndarray) -> tuple[np.ndarray, np.n
         ly[i] = wg_lat + d_lat
         lx[i] = wg_lon + d_lon
     return lx, ly
+
+
+def gcj02_to_wgs84(lons: np.ndarray, lats: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """
+    GCJ-02 → WGS84（迭代逼近逆变换）。高德/腾讯系界面复制的经纬度多为 GCJ，若在 WGS 轴（OSM 等）上标注需先转换。
+    """
+    wg_lon = np.asarray(lons, dtype=float).copy()
+    wg_lat = np.asarray(lats, dtype=float).copy()
+    mask = _china_gcj_range_mask(wg_lon, wg_lat)
+    if not np.any(mask):
+        return wg_lon, wg_lat
+    for _ in range(8):
+        mg_lon, mg_lat = wgs84_to_gcj02(wg_lon, wg_lat)
+        wg_lon = np.where(mask, 2.0 * wg_lon - mg_lon, wg_lon)
+        wg_lat = np.where(mask, 2.0 * wg_lat - mg_lat, wg_lat)
+    return wg_lon, wg_lat
 
 
 def provider_expects_gcj(provider: str) -> bool:
@@ -369,6 +417,129 @@ def make_animation_save_progress(total_frames: int):
     return progress_callback
 
 
+def iter_route_km_segments(total_km: float, step_km: float) -> list[tuple[float, float]]:
+    """将 [0, total_km] 按步长切为半开区间 [lo, hi) 的列表（最后一段 hi==total）。"""
+    if total_km <= 0 or step_km <= 0:
+        return []
+    out: list[tuple[float, float]] = []
+    lo = 0.0
+    while lo < total_km - 1e-12:
+        hi = min(float(total_km), lo + float(step_km))
+        out.append((lo, hi))
+        lo = hi
+    return out
+
+
+def km_segment_to_frame_span_excl(
+    km_lo: float, km_hi: float, total_km: float, total_frames: int
+) -> tuple[int, int]:
+    """
+    与 interpolate_lonlat 一致：prog_km 为 linspace(0, total_km, total_frames)。
+    返回半开帧区间 [i0, i1)，供截取 i0..i1-1 共 i1-i0 帧（含首次到达 km_hi 的那一帧）。
+    """
+    n = int(total_frames)
+    if n <= 0:
+        return 0, 0
+    if total_km <= 1e-15:
+        return 0, n
+    prog = np.linspace(0.0, float(total_km), n, dtype=float)
+    if km_lo <= 0.0:
+        i0 = 0
+    else:
+        i0 = int(np.searchsorted(prog, float(km_lo), side="left"))
+    i0 = max(0, min(n - 1, i0))
+    if km_hi >= float(total_km) - 1e-12:
+        i1 = n
+    else:
+        j = int(np.searchsorted(prog, float(km_hi), side="left"))
+        i1 = min(n, j + 1)
+    if i1 <= i0:
+        i1 = min(n, i0 + 1)
+    return i0, i1
+
+
+def split_mp4_by_route_km(
+    src_mp4: str,
+    *,
+    total_km: float,
+    total_frames: int,
+    fps: int,
+    step_km: float,
+    out_dir: str,
+    name_prefix: str,
+    video_crf: int | None,
+    video_bitrate_kbps: int | None,
+    video_preset: str,
+) -> list[str]:
+    """
+    用 ffmpeg 按累计公里切段（先完整渲染再切）。返回生成的文件路径列表。
+    """
+    if not shutil.which("ffmpeg"):
+        raise RuntimeError("未找到 ffmpeg，无法按公里切分视频（请安装并加入 PATH）")
+    if not os.path.isfile(src_mp4):
+        raise FileNotFoundError(f"待切分视频不存在: {src_mp4}")
+    segs = iter_route_km_segments(total_km, step_km)
+    if not segs:
+        print("按公里切分: 路线长为 0 或步长无效，跳过")
+        return []
+    os.makedirs(out_dir, exist_ok=True)
+    safe_pre = re.sub(r'[\\/:*?"<>|]+', "_", name_prefix).strip("._") or "segments"
+    outs: list[str] = []
+    fpsi = max(1, int(fps))
+    for idx, (lo, hi) in enumerate(segs, start=1):
+        i0, i1 = km_segment_to_frame_span_excl(lo, hi, total_km, total_frames)
+        nfr = i1 - i0
+        if nfr <= 0:
+            continue
+        t0 = i0 / float(fpsi)
+        dur = nfr / float(fpsi)
+        dst = os.path.join(out_dir, f"{safe_pre}_第{idx:02d}段_{lo:.2f}-{hi:.2f}km.mp4")
+        cmd: list[str] = [
+            "ffmpeg",
+            "-y",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-i",
+            os.path.abspath(src_mp4),
+            "-ss",
+            f"{t0:.6f}",
+            "-t",
+            f"{dur:.6f}",
+            "-an",
+        ]
+        if video_bitrate_kbps is not None:
+            cmd += [
+                "-c:v",
+                "libx264",
+                "-b:v",
+                f"{int(video_bitrate_kbps)}k",
+                "-maxrate",
+                f"{int(video_bitrate_kbps)}k",
+                "-bufsize",
+                f"{int(video_bitrate_kbps) * 2}k",
+            ]
+        else:
+            crf = 18 if video_crf is None else int(video_crf)
+            cmd += ["-c:v", "libx264", "-crf", str(crf)]
+        cmd += [
+            "-preset",
+            str(video_preset),
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+            dst,
+        ]
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        if r.returncode != 0:
+            err = (r.stderr or r.stdout or "").strip()
+            raise RuntimeError(f"ffmpeg 切分失败（{lo:g}-{hi:g} km）: {err or r.returncode}")
+        outs.append(dst)
+    print(f"按公里切分完成: {len(outs)} 个文件 → {out_dir}")
+    return outs
+
+
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     R = 6371.0
     p1, p2 = math.radians(lat1), math.radians(lat2)
@@ -461,6 +632,507 @@ def interpolate_lonlat(
     lon_i = np.interp(tgt, dist_km, lons)
     lat_i = np.interp(tgt, dist_km, lats)
     return lon_i, lat_i, tgt
+
+
+def interpolate_xy_at_route_km(
+    plot_lon: np.ndarray, plot_lat: np.ndarray, dist_km: np.ndarray, target_km: float
+) -> tuple[float, float] | None:
+    """在轨迹累计距离 target_km 处插值显示坐标。"""
+    if len(plot_lon) < 2:
+        return None
+    tot = float(dist_km[-1])
+    if target_km < -1e-9 or target_km > tot + 1e-6:
+        return None
+    x = float(np.interp(target_km, dist_km, plot_lon))
+    y = float(np.interp(target_km, dist_km, plot_lat))
+    return x, y
+
+
+def _normalize_route_km_key(k: float) -> float:
+    return round(float(k), 6)
+
+
+def load_km_markers_file(
+    path: str,
+) -> tuple[dict[float, dict], list[float] | None, list[float], bool]:
+    """
+    解析里程桩 JSON。
+    返回 (overrides, show_km 列表或 None, hide_km, merge_interval)。
+    merge_interval 为 True 时与 --km-interval 合并，而非白名单替换。
+    """
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    base = os.path.dirname(os.path.abspath(path))
+    show_list: list[float] | None = None
+    hide_list: list[float] = []
+    raw_overrides: list = []
+    merge_interval = False
+
+    if isinstance(data, list):
+        raw_overrides = data
+    elif isinstance(data, dict):
+        merge_interval = bool(data.get("with_interval", data.get("merge_interval", False)))
+        sk = data.get("show_km", data.get("only_km"))
+        if isinstance(sk, list) and len(sk) > 0:
+            show_list = [float(x) for x in sk]
+        hk = data.get("hide_km", data.get("skip_km"))
+        if isinstance(hk, list):
+            hide_list = [float(x) for x in hk]
+        ro = data.get("overrides")
+        if isinstance(ro, list):
+            raw_overrides = ro
+    else:
+        raise ValueError(
+            "km-overrides 须为 JSON 数组，或对象 {\"overrides\": [...], \"show_km\": [...], \"hide_km\": [...] }"
+        )
+
+    out: dict[float, dict] = {}
+    for raw in raw_overrides:
+        if not isinstance(raw, dict):
+            print(f"跳过非对象 km-overrides 项: {raw!r}")
+            continue
+        if "km" not in raw:
+            print(f"跳过缺 km 的 km-overrides 项: {raw!r}")
+            continue
+        km_key = _normalize_route_km_key(float(raw["km"]))
+        merged = _merge_km_override_entry(raw, base)
+        out[km_key] = merged
+    return out, show_list, hide_list, merge_interval
+
+
+def _merge_km_override_entry(raw: dict, json_dir: str) -> dict:
+    """合并 JSON 条目：解析图片路径、offset 列表等。"""
+    out = dict(raw)
+    img = out.get("image")
+    if isinstance(img, str) and img.strip():
+        ip = img.strip()
+        out["image"] = ip if os.path.isabs(ip) else os.path.normpath(os.path.join(json_dir, ip))
+    else:
+        out.pop("image", None)
+    io = raw.get("image_offset")
+    if isinstance(io, (list, tuple)) and len(io) >= 2:
+        out["image_dx"], out["image_dy"] = float(io[0]), float(io[1])
+    else:
+        out.setdefault("image_dx", 0.0)
+        out.setdefault("image_dy", 28.0)
+    to = raw.get("text_offset")
+    if isinstance(to, (list, tuple)) and len(to) >= 2:
+        out["text_dx"], out["text_dy"] = float(to[0]), float(to[1])
+    else:
+        out.pop("text_dx", None)
+        out.pop("text_dy", None)
+    ak = raw.get("anchor_km")
+    if ak is not None:
+        out["anchor_km"] = float(ak)
+    return out
+
+
+def warn_km_marker_label_collisions(
+    targets: list[float], total_km: float, fmt: str
+) -> None:
+    """若多桩格式化后文字相同（常见于 interval<1 仍用 :.0f），打印提示。"""
+    labels: dict[str, list[float]] = {}
+    for kmv in targets:
+        if kmv > total_km + 1e-6:
+            continue
+        try:
+            lab = fmt.format(km=kmv)
+        except Exception:
+            continue
+        labels.setdefault(lab, []).append(float(kmv))
+    dups = {lab: kms for lab, kms in labels.items() if len(kms) > 1}
+    if not dups:
+        return
+    parts: list[str] = []
+    for lab, kms in sorted(dups.items(), key=lambda x: min(x[1])):
+        ks = ", ".join(f"{k:g}" for k in sorted(set(kms)))
+        parts.append(f"「{lab}」← {ks} km")
+    print(
+        "提示: 多个里程桩的标签文字相同，易被看成「重复」。"
+        "若 --km-interval 小于 1，请不要用 {km:.0f} 等取整格式，可改为 {km:.1f} 或 {km:g}。"
+        f" 当前冲突: {'; '.join(parts)}"
+    )
+
+
+def add_route_km_markers(
+    ax,
+    plot_lon: np.ndarray,
+    plot_lat: np.ndarray,
+    dist_km: np.ndarray,
+    total_km: float,
+    args: argparse.Namespace,
+    km_overrides: dict[float, dict] | None = None,
+    *,
+    show_km: list[float] | None = None,
+    hide_km: list[float] | None = None,
+    merge_interval: bool = False,
+) -> None:
+    """沿路线绘制里程标签。show_km 非空且 merge_interval=False 时为白名单；merge_interval=True 时与 interval 并集。"""
+    interval = float(args.km_interval)
+    has_extra_list = show_km is not None and len(show_km) > 0
+    whitelist = has_extra_list and not merge_interval
+    if interval <= 0 and not whitelist and not merge_interval:
+        return
+    if merge_interval:
+        tset = set()
+        if interval > 0:
+            targets_m: list[float] = []
+            if args.km_include_start:
+                targets_m.append(0.0)
+            k = interval
+            while k <= total_km + 1e-9:
+                targets_m.append(float(k))
+                k += interval
+            tset = {round(t, 8) for t in targets_m}
+        if km_overrides:
+            for kk in km_overrides.keys():
+                fk = float(kk)
+                if -1e-9 <= fk <= total_km + 1e-6:
+                    tset.add(round(fk, 8))
+        if has_extra_list:
+            for x in show_km or []:
+                fk = float(x)
+                if -1e-9 <= fk <= total_km + 1e-6:
+                    tset.add(round(fk, 8))
+    elif whitelist:
+        tset = set()
+        for x in show_km or []:
+            fk = float(x)
+            if -1e-9 <= fk <= total_km + 1e-6:
+                tset.add(round(fk, 8))
+    else:
+        targets: list[float] = []
+        if args.km_include_start:
+            targets.append(0.0)
+        k = interval
+        while k <= total_km + 1e-9:
+            targets.append(float(k))
+            k += interval
+        tset = {round(t, 8) for t in targets}
+        if km_overrides:
+            for kk in km_overrides.keys():
+                fk = float(kk)
+                if -1e-9 <= fk <= total_km + 1e-6:
+                    tset.add(round(fk, 8))
+    if hide_km:
+        hk = {round(float(h), 8) for h in hide_km}
+        tset -= hk
+    targets = sorted(tset)
+    fmt = str(args.km_format)
+    warn_km_marker_label_collisions(targets, total_km, fmt)
+    fs = float(args.km_fontsize)
+    ovr_map = km_overrides or {}
+    for kmv in targets:
+        if kmv > total_km + 1e-6:
+            continue
+        ovr = ovr_map.get(_normalize_route_km_key(kmv))
+        anchor_km = float(ovr["anchor_km"]) if ovr and ovr.get("anchor_km") is not None else float(kmv)
+        xy = interpolate_xy_at_route_km(plot_lon, plot_lat, dist_km, anchor_km)
+        if xy is None:
+            continue
+        x, y = xy
+        hide_dot = bool(ovr.get("hide_dot")) if ovr else False
+        if not hide_dot:
+            ax.scatter(
+                [x],
+                [y],
+                s=float(args.km_dot_size),
+                c=str(args.km_dot_color),
+                edgecolors=str(args.km_dot_edgecolor),
+                linewidths=float(args.km_dot_edgewidth),
+                zorder=5,
+            )
+        tdx = float(ovr["text_dx"]) if ovr and ovr.get("text_dx") is not None else float(args.km_text_offset_x)
+        tdy = float(ovr["text_dy"]) if ovr and ovr.get("text_dy") is not None else float(args.km_text_offset_y)
+        fs_use = float(ovr["fontsize"]) if ovr and ovr.get("fontsize") is not None else fs
+        col = str(ovr["color"]) if ovr and ovr.get("color") is not None else str(args.km_text_color)
+        fw = str(ovr["fontweight"]) if ovr and ovr.get("fontweight") is not None else str(args.km_fontweight)
+        bg = str(ovr["bg"]) if ovr and ovr.get("bg") is not None else str(args.km_bg_color)
+        edge = str(ovr["edge"]) if ovr and ovr.get("edge") is not None else str(args.km_edge_color)
+        ew = float(ovr["edge_width"]) if ovr and ovr.get("edge_width") is not None else float(args.km_edge_width)
+        bx = str(ovr["boxstyle"]) if ovr and ovr.get("boxstyle") is not None else str(args.km_boxstyle)
+        bga = float(ovr["bg_alpha"]) if ovr and ovr.get("bg_alpha") is not None else float(args.km_bg_alpha)
+        img_path = ovr.get("image") if ovr else None
+        has_km_image = isinstance(img_path, str) and bool(img_path) and os.path.isfile(img_path)
+        if not ovr:
+            text_empty = False
+        elif "text" not in ovr:
+            text_empty = True
+        else:
+            tv = ovr.get("text")
+            text_empty = tv is None or str(tv).strip() == ""
+        # 无字（未写 text 或 text 为空）且配图有效：图片代替标签，偏移用 text_offset；非空 text 时字用 text_offset、图用 image_offset
+        if ovr and text_empty and has_km_image:
+            label: str | None = None
+            image_xy_pts = (tdx, tdy)
+        elif ovr and not text_empty:
+            label = str(ovr["text"])
+            image_xy_pts = (
+                float(ovr.get("image_dx", 0.0)),
+                float(ovr.get("image_dy", 28.0)),
+            )
+        else:
+            label = fmt.format(km=kmv)
+            image_xy_pts = (
+                float(ovr.get("image_dx", 0.0)) if ovr else 0.0,
+                float(ovr.get("image_dy", 28.0)) if ovr else 28.0,
+            )
+        if has_km_image:
+            try:
+                im = plt.imread(str(img_path))
+                iz = float(ovr.get("image_zoom", 0.14)) if ovr else 0.14
+                imagebox = OffsetImage(im, zoom=iz)
+                ab = AnnotationBbox(
+                    imagebox,
+                    (x, y),
+                    xybox=image_xy_pts,
+                    boxcoords="offset points",
+                    frameon=False,
+                    pad=0,
+                    zorder=6,
+                )
+                ax.add_artist(ab)
+            except Exception as e:
+                print(f"里程桩图片跳过 {img_path}: {e}")
+                has_km_image = False
+                if ovr and text_empty:
+                    label = fmt.format(km=kmv)
+        if label is not None:
+            ax.annotate(
+                label,
+                xy=(x, y),
+                xytext=(tdx, tdy),
+                textcoords="offset points",
+                ha="center",
+                va="bottom",
+                fontsize=fs_use,
+                color=col,
+                fontweight=fw,
+                bbox=dict(
+                    boxstyle=bx,
+                    facecolor=bg,
+                    edgecolor=edge,
+                    linewidth=ew,
+                    alpha=bga,
+                ),
+                zorder=7 if has_km_image else 6,
+            )
+
+
+_POI_STYLE_DEFAULTS: dict[str, object] = {
+    "text": "",
+    "fontsize": 12.0,
+    "color": "#ffffff",
+    "bg": "#37474f",
+    "edge": "#ffffff",
+    "boxstyle": "round,pad=0.36",
+    "edge_width": 1.2,
+    "fontweight": "bold",
+    "ha": "center",
+    "va": "center",
+    "image_zoom": 0.14,
+    "image_dx": 0.0,
+    "image_dy": 26.0,
+    "text_dx": 0.0,
+    "text_dy": -20.0,
+    "text_alpha": 1.0,
+    "bg_alpha": 0.92,
+}
+
+
+def load_pois_json(path: str) -> list[dict]:
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    if isinstance(data, dict) and "pois" in data:
+        data = data["pois"]
+    if not isinstance(data, list):
+        raise ValueError("POI 文件须为 JSON 数组，或 {\"pois\": [ ... ] }")
+    return data
+
+
+def _merge_poi_entry(raw: dict, json_dir: str) -> dict:
+    out: dict[str, object] = dict(_POI_STYLE_DEFAULTS)
+    for k, v in raw.items():
+        if v is None:
+            continue
+        out[k] = v
+    img = out.get("image")
+    if isinstance(img, str) and img.strip():
+        ip = img.strip()
+        out["image"] = ip if os.path.isabs(ip) else os.path.normpath(os.path.join(json_dir, ip))
+    else:
+        out.pop("image", None)
+    io = raw.get("image_offset")
+    if isinstance(io, (list, tuple)) and len(io) >= 2:
+        out["image_dx"], out["image_dy"] = float(io[0]), float(io[1])
+    to = raw.get("text_offset")
+    if isinstance(to, (list, tuple)) and len(to) >= 2:
+        out["text_dx"], out["text_dy"] = float(to[0]), float(to[1])
+    return out
+
+
+def draw_poi_style_label(
+    ax,
+    x: float,
+    y: float,
+    p: dict,
+    *,
+    log_prefix: str = "标注",
+    zorder_img: int = 6,
+    zorder_txt: int = 7,
+) -> None:
+    """在轴坐标 (x,y) 绘制与 POI 一致的文字框与可选配图（合并后的 p）。"""
+    img_path = p.get("image")
+    has_img = isinstance(img_path, str) and os.path.isfile(img_path)
+    if has_img:
+        try:
+            im = plt.imread(img_path)
+            imagebox = OffsetImage(im, zoom=float(p["image_zoom"]))
+            ab = AnnotationBbox(
+                imagebox,
+                (x, y),
+                xybox=(float(p["image_dx"]), float(p["image_dy"])),
+                boxcoords="offset points",
+                frameon=False,
+                pad=0,
+                zorder=zorder_img,
+            )
+            ax.add_artist(ab)
+        except Exception as e:
+            print(f"{log_prefix} 图片跳过 {img_path}: {e}")
+            has_img = False
+    txt = str(p.get("text") or "")
+    if txt:
+        ax.annotate(
+            txt,
+            xy=(x, y),
+            xytext=(float(p["text_dx"]), float(p["text_dy"])),
+            textcoords="offset points",
+            ha=str(p["ha"]),
+            va=str(p["va"]),
+            fontsize=float(p["fontsize"]),
+            color=str(p["color"]),
+            fontweight=str(p["fontweight"]),
+            alpha=float(p["text_alpha"]),
+            bbox=dict(
+                boxstyle=str(p["boxstyle"]),
+                facecolor=str(p["bg"]),
+                edgecolor=str(p["edge"]),
+                linewidth=float(p["edge_width"]),
+                alpha=float(p["bg_alpha"]),
+            ),
+            zorder=zorder_txt,
+        )
+
+
+def load_route_endpoints_json(path: str) -> dict[str, dict]:
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        raise ValueError("route-endpoints 须为 JSON 对象，含 start / end 等键")
+    out: dict[str, dict] = {}
+    for key in ("start", "end"):
+        v = data.get(key)
+        if isinstance(v, dict):
+            out[key] = v
+    return out
+
+
+def add_route_endpoint_annotations(
+    ax,
+    endpoints_json_path: str,
+    plot_lon: np.ndarray,
+    plot_lat: np.ndarray,
+) -> None:
+    """在轨迹首末点绘制起点/终点（样式同 POI）；坐标已为显示用 lon/lat。"""
+    if len(plot_lon) < 1:
+        return
+    items = load_route_endpoints_json(endpoints_json_path)
+    if not items:
+        return
+    base = os.path.dirname(os.path.abspath(endpoints_json_path))
+    zi, zt = 10, 11
+
+    def one(role: str, ix: int) -> None:
+        raw = items.get(role)
+        if not raw:
+            return
+        x, y = float(plot_lon[ix]), float(plot_lat[ix])
+        p = _merge_poi_entry(raw, base)
+        if raw.get("show_dot", True):
+            ax.scatter(
+                [x],
+                [y],
+                s=float(raw.get("dot_size", 72.0)),
+                c=str(raw.get("dot_color", "#2e7d32")),
+                edgecolors=str(raw.get("dot_edgecolor", "#ffffff")),
+                linewidths=float(raw.get("dot_edgewidth", 1.15)),
+                zorder=zi - 1,
+            )
+        draw_poi_style_label(
+            ax,
+            x,
+            y,
+            p,
+            log_prefix=f"起点终点({role})",
+            zorder_img=zi,
+            zorder_txt=zt,
+        )
+
+    one("start", 0)
+    if len(plot_lon) >= 2:
+        one("end", -1)
+
+
+def _poi_input_is_gcj(raw: dict, default_mode: str) -> bool:
+    mode = raw.get("coords") or raw.get("coord_system") or default_mode
+    return str(mode).lower().strip() in ("gcj02", "gcj", "mars", "amap", "gaode")
+
+
+def poi_lonlat_to_ax_xy(
+    lon: float,
+    lat: float,
+    *,
+    provider: str,
+    input_is_gcj: bool,
+) -> tuple[float, float]:
+    """将 POI 的 lon/lat 转为与当前底图一致的轴坐标。"""
+    prov = provider.lower()
+    if provider_expects_gcj(prov):
+        if input_is_gcj:
+            return lon, lat
+        px, py = to_display_lonlat(prov, np.asarray([lon]), np.asarray([lat]), assume_gcj02_track=False)
+        return float(px[0]), float(py[0])
+    if input_is_gcj:
+        px, py = gcj02_to_wgs84(np.asarray([lon]), np.asarray([lat]))
+        return float(px[0]), float(py[0])
+    return lon, lat
+
+
+def add_poi_annotations(
+    ax,
+    poi_json_path: str,
+    provider: str,
+    assume_gcj02_track: bool,
+    poi_coords_default: str = "wgs84",
+) -> None:
+    """绘制 POI；coords 默认 wgs84，高德抄点请用 gcj02（见文件头）。GPX 的 assume_gcj02_track 不参与 POI。"""
+    _ = assume_gcj02_track
+    items = load_pois_json(poi_json_path)
+    base = os.path.dirname(os.path.abspath(poi_json_path))
+    for raw in items:
+        if not isinstance(raw, dict):
+            print(f"跳过非对象 POI: {raw!r}")
+            continue
+        if "lon" not in raw or "lat" not in raw:
+            print(f"跳过缺 lon/lat 的 POI: {raw!r}")
+            continue
+        p = _merge_poi_entry(raw, base)
+        lon = float(raw["lon"])
+        lat = float(raw["lat"])
+        igcj = _poi_input_is_gcj(raw, poi_coords_default)
+        x, y = poi_lonlat_to_ax_xy(lon, lat, provider=provider, input_is_gcj=igcj)
+        draw_poi_style_label(ax, x, y, p, log_prefix="POI")
 
 
 def default_output_path(gpx_path: str, duration_s: float) -> str:
@@ -804,6 +1476,39 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--margin-deg", type=float, default=0.015, help="轨迹包络外扩（度），约 1.7km")
     p.add_argument(
+        "--route-full-color",
+        default="#3388ff",
+        metavar="COLOR",
+        help="整段轨迹底轨颜色（matplotlib 颜色串），默认 #3388ff",
+    )
+    p.add_argument(
+        "--route-full-width",
+        type=float,
+        default=3.0,
+        metavar="PT",
+        help="整段轨迹底轨线宽（点），默认 3",
+    )
+    p.add_argument(
+        "--route-full-alpha",
+        type=float,
+        default=0.35,
+        metavar="A",
+        help="整段轨迹底轨透明度 0~1，默认 0.35",
+    )
+    p.add_argument(
+        "--route-progress-color",
+        default="#e53935",
+        metavar="COLOR",
+        help="动画已跑过段（前景实线）颜色，默认 #e53935",
+    )
+    p.add_argument(
+        "--route-progress-width",
+        type=float,
+        default=3.5,
+        metavar="PT",
+        help="动画已跑过段线宽（点），默认 3.5",
+    )
+    p.add_argument(
         "--min-point-spacing-m",
         type=float,
         default=5.0,
@@ -875,6 +1580,24 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--preview", action="store_true", help="仅弹出窗口预览首帧静态图（不导出视频）")
     p.add_argument(
+        "--test-image",
+        action="store_true",
+        help="测试：只保存一张 PNG（按路线进度绘制已跑段与当前位置），不编码 MP4、不做按公里切分",
+    )
+    p.add_argument(
+        "--test-image-out",
+        default=None,
+        metavar="PATH",
+        help="测试图路径；默认与 --out 同主文件名加 _test.png，无 --out 则用 GPX 同目录下 轨迹名_map_test.png",
+    )
+    p.add_argument(
+        "--test-image-progress",
+        type=float,
+        default=0.5,
+        metavar="P",
+        help="测试图路线进度比例 0~1（默认 0.5）；0 接近起点，1 为终点",
+    )
+    p.add_argument(
         "--no-progress",
         action="store_true",
         help="导出 MP4 时不显示逐帧编码进度条（重定向日志或 CI 时可用）",
@@ -917,6 +1640,106 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--video-preset",
         default="medium",
         help="libx264 preset（ultrafast…veryslow）；越慢通常同等体积画质更好，默认 medium",
+    )
+    p.add_argument(
+        "--km-markers",
+        action="store_true",
+        help="沿路线按间隔标注累计里程（显示坐标与轨迹一致）",
+    )
+    p.add_argument(
+        "--km-interval",
+        type=float,
+        default=1.0,
+        metavar="KM",
+        help="里程桩间隔（公里），默认 1",
+    )
+    p.add_argument(
+        "--km-include-start",
+        action="store_true",
+        help="在起点增加「0」公里桩（否则第一个桩在 km-interval）",
+    )
+    p.add_argument(
+        "--km-format",
+        default="{km:g} km",
+        help="里程文字格式，占位 {km}；默认 {km:g} 会随小数显示。"
+        "若 --km-interval 为 0.5 等，勿用 {km:.0f}，否则相邻半公里会与下一整公里显示同一数字。",
+    )
+    p.add_argument("--km-fontsize", type=float, default=11.0, help="里程标签字号")
+    p.add_argument("--km-fontweight", default="bold", help="里程标签字重")
+    p.add_argument("--km-text-color", default="#ffffff", help="里程标签文字颜色")
+    p.add_argument("--km-bg-color", default="#c62828", help="里程标签底色")
+    p.add_argument("--km-bg-alpha", type=float, default=0.94, help="里程标签底色透明度 0~1")
+    p.add_argument("--km-edge-color", default="#ffffff", help="里程标签描边颜色")
+    p.add_argument("--km-edge-width", type=float, default=1.35, help="里程标签框线宽")
+    p.add_argument(
+        "--km-boxstyle",
+        default="round,pad=0.4",
+        help="里程标签框样式（matplotlib boxstyle），默认圆角",
+    )
+    p.add_argument("--km-dot-color", default="#ffeb3b", help="里程桩圆点颜色")
+    p.add_argument("--km-dot-edgecolor", default="#b71c1c", help="里程桩圆点外缘颜色")
+    p.add_argument("--km-dot-edgewidth", type=float, default=0.9, help="里程桩圆点外缘线宽")
+    p.add_argument("--km-dot-size", type=float, default=55.0, help="里程桩圆点面积（scatter 的 s）")
+    p.add_argument(
+        "--km-text-offset-y",
+        type=float,
+        default=16.0,
+        help="标签相对轨迹点的纵向偏移（点，正值向上）",
+    )
+    p.add_argument(
+        "--km-text-offset-x",
+        type=float,
+        default=0.0,
+        help="标签相对轨迹点的横向偏移（点，正值向右）；单桩可再用 overrides 里 text_offset 覆盖",
+    )
+    p.add_argument(
+        "--km-overrides-json",
+        default=None,
+        metavar="PATH",
+        help="与 --km-markers 联用：overrides / show_km / hide_km / with_interval（与 --km-interval 合并），见文件头",
+    )
+    p.add_argument(
+        "--poi-json",
+        default=None,
+        metavar="PATH",
+        help="景点/地标 JSON；默认 lon/lat 为 WGS84，高德抄点请在 JSON 写 coords:gcj02 或见 --poi-coords-default",
+    )
+    p.add_argument(
+        "--poi-coords-default",
+        choices=("wgs84", "gcj02"),
+        default="wgs84",
+        help="POI 未写 coords 时的坐标系：gcj02 适合全部从高德复制的点",
+    )
+    p.add_argument(
+        "--route-endpoints-json",
+        default=None,
+        metavar="PATH",
+        help="起点/终点标注 UTF-8 JSON：对象含 start、end（可选其一），字段同 POI（text/image/样式/offset），"
+        "另可选 show_dot、dot_size、dot_color 等；锚点自动取 GPX 轨迹首尾",
+    )
+    p.add_argument(
+        "--split-video-by-km",
+        action="store_true",
+        help="主视频编码完成后，按累计公里用 ffmpeg 切成多段（需 PATH 中有 ffmpeg）",
+    )
+    p.add_argument(
+        "--split-video-km-step",
+        type=float,
+        default=1.0,
+        metavar="KM",
+        help="切分步长（公里），如 1 或 0.5；与动画中 linspace 里程进度一致",
+    )
+    p.add_argument(
+        "--split-video-out-dir",
+        default=None,
+        metavar="DIR",
+        help="分段 MP4 输出目录；默认为主视频同目录下「主文件名_km_segments」",
+    )
+    p.add_argument(
+        "--split-video-name-prefix",
+        default=None,
+        metavar="NAME",
+        help="分段文件名前缀；默认与主视频主文件名相同（不含扩展名）",
     )
     return p
 
@@ -1013,18 +1836,76 @@ def main() -> None:
                 loaded_prov, lon_f_wgs, lat_f_wgs, args.assume_gcj02_track
             )
 
-    # 半透明已跑过路线（全轨迹）
+    # 无底图或加载失败时坐标轴为 WGS，POI 变换需与 osm 一致（不做 GCJ 偏移）
+    loaded_prov_for_poi = loaded_prov if loaded_prov is not None else "osm"
+
+    # 半透明整段路线（底轨）
     ax.plot(
         plot_lon,
         plot_lat,
-        color="#3388ff",
-        linewidth=3,
-        alpha=0.35,
+        color=str(args.route_full_color),
+        linewidth=float(args.route_full_width),
+        alpha=float(args.route_full_alpha),
         solid_capstyle="round",
         zorder=2,
     )
-    line, = ax.plot([], [], color="#e53935", linewidth=3.5, solid_capstyle="round", zorder=3)
-    head, = ax.plot([], [], "o", color="#ff7043", markeredgecolor="white", markeredgewidth=1.2, markersize=9, zorder=4)
+    km_ovr: dict[float, dict] | None = None
+    km_show: list[float] | None = None
+    km_hide: list[float] | None = None
+    km_merge_interval = False
+    if args.km_overrides_json:
+        if not args.km_markers:
+            print("提示: 已指定 --km-overrides-json，但未加 --km-markers；覆盖项不会绘制，请同时加上 --km-markers")
+        elif not os.path.isfile(args.km_overrides_json):
+            raise FileNotFoundError(f"km-overrides 文件不存在: {args.km_overrides_json}")
+        else:
+            km_ovr, km_show, km_hide, km_merge_interval = load_km_markers_file(args.km_overrides_json)
+    if args.km_markers:
+        add_route_km_markers(
+            ax,
+            plot_lon,
+            plot_lat,
+            dist_km,
+            total_km,
+            args,
+            km_overrides=km_ovr,
+            show_km=km_show,
+            hide_km=km_hide,
+            merge_interval=km_merge_interval,
+        )
+    if args.poi_json:
+        if not os.path.isfile(args.poi_json):
+            raise FileNotFoundError(f"POI 文件不存在: {args.poi_json}")
+        add_poi_annotations(
+            ax,
+            args.poi_json,
+            loaded_prov_for_poi,
+            args.assume_gcj02_track,
+            poi_coords_default=args.poi_coords_default,
+        )
+    if args.route_endpoints_json:
+        if not os.path.isfile(args.route_endpoints_json):
+            raise FileNotFoundError(f"起点终点 JSON 不存在: {args.route_endpoints_json}")
+        add_route_endpoint_annotations(ax, args.route_endpoints_json, plot_lon, plot_lat)
+
+    line, = ax.plot(
+        [],
+        [],
+        color=str(args.route_progress_color),
+        linewidth=float(args.route_progress_width),
+        solid_capstyle="round",
+        zorder=8,
+    )
+    head, = ax.plot(
+        [],
+        [],
+        "o",
+        color="#ff7043",
+        markeredgecolor="white",
+        markeredgewidth=1.2,
+        markersize=9,
+        zorder=9,
+    )
 
     if args.show_lonlat_axis:
         title = ax.set_title("", fontsize=14, pad=8)
@@ -1042,6 +1923,38 @@ def main() -> None:
         )
         title.set_path_effects([pe.withStroke(linewidth=3.0, foreground="white")])
     apply_map_frame_cleanup(ax, fig, show_axis=args.show_lonlat_axis)
+
+    if args.test_image:
+        prog = float(args.test_image_progress)
+        prog = max(0.0, min(1.0, prog))
+        idx = int(round(prog * (total_frames - 1))) if total_frames > 1 else 0
+        idx = max(0, min(total_frames - 1, idx))
+        npts = idx + 1
+        line.set_data(lon_anim[:npts], lat_anim[:npts])
+        head.set_data([lon_anim[idx]], [lat_anim[idx]])
+        title.set_text(
+            f"测试帧 progress={prog:.2f} | {prog_km[idx]:.2f} / {total_km:.2f} km"
+        )
+        if args.show_lonlat_axis:
+            plt.tight_layout()
+        else:
+            fig.subplots_adjust(left=0, right=1, bottom=0, top=1, hspace=0, wspace=0)
+        if args.test_image_out:
+            img_out = os.path.abspath(args.test_image_out)
+        elif args.out:
+            stem, _ = os.path.splitext(os.path.abspath(args.out))
+            img_out = f"{stem}_test.png"
+        else:
+            gpx_dir = os.path.dirname(os.path.abspath(args.gpx)) or "."
+            gpx_base = os.path.splitext(os.path.basename(args.gpx))[0]
+            gpx_base = re.sub(r'[^\w\u4e00-\u9fff]+', "_", gpx_base).strip("_") or "route"
+            img_out = os.path.join(gpx_dir, f"{gpx_base}_map_test.png")
+        os.makedirs(os.path.dirname(img_out) or ".", exist_ok=True)
+        ensure_h264_even_pixel_frame(fig)
+        fig.savefig(img_out, dpi=args.dpi, pad_inches=0, facecolor=fig.get_facecolor())
+        plt.close(fig)
+        print(f"测试图已保存（不写视频）: {img_out}")
+        return
 
     if args.preview:
         line.set_data(lon_anim[: total_frames // 2 + 1], lat_anim[: total_frames // 2 + 1])
@@ -1102,6 +2015,32 @@ def main() -> None:
     if not args.no_progress:
         print()
     plt.close(fig)
+    if args.split_video_by_km:
+        step = float(args.split_video_km_step)
+        if step <= 0:
+            print("提示: --split-video-km-step 须为正数，已跳过按公里切分")
+        else:
+            out_abs = os.path.abspath(out)
+            stem = os.path.splitext(os.path.basename(out_abs))[0]
+            split_dir = args.split_video_out_dir
+            if not split_dir:
+                split_dir = os.path.join(os.path.dirname(out_abs), f"{stem}_km_segments")
+            prefix = args.split_video_name_prefix or stem
+            try:
+                split_mp4_by_route_km(
+                    out_abs,
+                    total_km=total_km,
+                    total_frames=total_frames,
+                    fps=int(args.fps),
+                    step_km=step,
+                    out_dir=os.path.abspath(split_dir),
+                    name_prefix=prefix,
+                    video_crf=None if args.video_bitrate_kbps is not None else int(args.video_crf),
+                    video_bitrate_kbps=args.video_bitrate_kbps,
+                    video_preset=str(args.video_preset),
+                )
+            except Exception as e:
+                print(f"按公里切分失败: {e}")
     print("完成")
 
 
